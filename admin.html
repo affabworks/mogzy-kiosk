@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#F7F4EF">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
+<title>Mogzy · الإدارة</title>
+<style>
+:root{--bg:#F7F4EF;--ink:#1D1A17;--mute:#6B6258;--line:#E6E0D8;--gold:#DABEA1;--goldtxt:#8A6A45;--soft:#F1EBE2;--btn:#CFC6BA;--green:#3F7A55;--red:#B5473C;--warn:#F3E7D6}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:'IBM Plex Sans Arabic',system-ui,sans-serif}
+body{min-height:100vh}
+img{-webkit-touch-callout:none}
+.wrap{max-width:980px;margin:0 auto;padding:18px 18px 110px}
+.top{display:flex;align-items:center;justify-content:space-between;height:60px}
+.top img{height:38px}
+h1{font-size:30px;margin:6px 0 4px}h2{font-size:21px;margin:0 0 10px}
+.sub{color:var(--mute);font-size:16px;line-height:1.7}
+.card{background:#fff;border:1.5px solid var(--line);border-radius:22px;padding:18px 20px;margin:12px 0}
+.row{display:flex;align-items:center;gap:12px;min-height:58px;border-bottom:1px solid var(--line)}
+.row:last-child{border:none}.row .grow{flex:1;min-width:0}
+.row b{font-weight:600}.row small{color:var(--mute);font-size:14px;display:block}
+.chip{display:inline-flex;align-items:center;height:30px;padding:0 12px;border-radius:15px;font-size:14px;font-weight:500;white-space:nowrap}
+.c-green{background:#E3F0E7;color:#2F6B47}.c-amber{background:#F6E7C9;color:#7A5714}.c-gray{background:#EFE9E0;color:var(--mute)}.c-red{background:#F5DEDA;color:#8E3A31}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:52px;padding:0 24px;border-radius:15px;border:1.5px solid var(--btn);background:#fff;color:var(--ink);font:600 17px 'IBM Plex Sans Arabic',sans-serif;cursor:pointer}
+.btn.p{background:var(--ink);color:var(--bg);border:none}.btn.sm{height:40px;padding:0 16px;font-size:15px;border-radius:12px}.btn.full{width:100%}
+.btn[disabled]{opacity:.5}
+label.f{display:flex;flex-direction:column;gap:7px;font-size:15px;color:var(--mute);font-weight:500;margin:10px 0}
+input,select{height:52px;border-radius:14px;border:1.5px solid var(--btn);background:#fff;color:var(--ink);font:500 18px 'IBM Plex Sans Arabic',sans-serif;padding:0 14px;width:100%}
+input[type=checkbox]{width:24px;height:24px;accent-color:var(--ink);padding:0}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.stat{background:#fff;border:1.5px solid var(--line);border-radius:18px;padding:14px 16px}.stat span{color:var(--mute);font-size:14px}.stat div{font-size:30px;font-weight:700;margin-top:2px}
+.tabs{position:fixed;bottom:0;left:0;right:0;display:flex;background:#fff;border-top:1px solid var(--line);padding:6px 6px calc(6px + env(safe-area-inset-bottom));z-index:5}
+.tabs button{flex:1;border:none;background:none;height:54px;font:500 14px 'IBM Plex Sans Arabic',sans-serif;color:var(--mute);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer;position:relative}
+.tabs button.on{color:var(--ink);font-weight:700}
+.tabs svg{width:24px;height:24px}
+.badge{position:absolute;top:2px;right:calc(50% - 22px);min-width:18px;height:18px;border-radius:9px;background:var(--red);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;padding:0 5px}
+.err{color:var(--red);font-size:15px;min-height:22px;margin:6px 0}
+.ok{color:var(--green)}
+.note{background:var(--warn);border-radius:14px;padding:12px 14px;font-size:14px;line-height:1.7;color:#4A3E30}
+.net{background:var(--ink);color:var(--bg);border-radius:24px;padding:22px 24px}.net small{color:var(--gold)}.net div{font-size:48px;font-weight:700;direction:ltr;text-align:right}
+.code{font-size:34px;font-weight:700;letter-spacing:3px;direction:ltr;text-align:right}
+table{width:100%;border-collapse:collapse;font-size:15px}th,td{padding:10px 6px;border-bottom:1px solid var(--line);text-align:right}th{color:var(--mute);font-weight:500}td.n{direction:ltr;text-align:left}
+.center{display:flex;flex-direction:column;justify-content:center;min-height:80vh;max-width:440px;margin:0 auto}
+.link{color:var(--goldtxt);font-weight:600;cursor:pointer;background:none;border:none;font:inherit;padding:0}
+.hide{display:none!important}
+@media(max-width:640px){.stats{grid-template-columns:1fr 1fr 1fr}.stat div{font-size:24px}.grid2{grid-template-columns:1fr}th:nth-child(n+5),td:nth-child(n+5){display:none}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script src="config.js"></script>
+<script>
+"use strict";
+const CFG = window.MOGZY, $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const money = (n) => Number(n || 0).toLocaleString("en-US", { maximumFractionDigits: 0 });
+const hhmm = (iso) => new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+const ICON = {
+  today: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z"/></svg>',
+  inbox: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 13l2-8h12l2 8M4 13v6h16v-6M4 13h5l1 2h4l1-2h5"/></svg>',
+  users: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 20v-1a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v1M9.5 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM21 20v-1a4 4 0 0 0-3-3.8M16 4.2a3.5 3.5 0 0 1 0 6.6"/></svg>',
+  cash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM3 10h18M16 14.5h2"/></svg>',
+  cog: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h10M18 7h2M4 17h2M10 17h10M14 4v6M6 14v6"/></svg>',
+  clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+};
+const LOGO = '<img src="logo.png" alt="Mogzy">';
+
+/* ---------------- REST helpers (the user's own login token; RLS does the protecting) ---------------- */
+let S = null;                                   // session {access_token, refresh_token, expires_at, user}
+try { S = JSON.parse(localStorage.getItem("mogzy.sess") || "null"); } catch {}
+const saveS = (s) => { S = s; try { s ? localStorage.setItem("mogzy.sess", JSON.stringify(s)) : localStorage.removeItem("mogzy.sess"); } catch {} };
+async function raw(path, { method = "GET", body, token, prefer } = {}) {
+  const r = await fetch(CFG.url + path, { method, headers: { apikey: CFG.key, authorization: "Bearer " + (token || CFG.key), "content-type": "application/json", ...(prefer ? { prefer } : {}) }, body: body === undefined ? undefined : JSON.stringify(body) });
+  const t = await r.text(); let j = null; try { j = t ? JSON.parse(t) : null; } catch { j = t; }
+  if (!r.ok) { const e = new Error((j && (j.message || j.msg || j.error_description || j.hint)) || "خطأ " + r.status); e.status = r.status; throw e; }
+  return j;
+}
+function setSession(a) { saveS({ access_token: a.access_token, refresh_token: a.refresh_token, expires_at: Math.floor(Date.now() / 1000) + (a.expires_in || 3600) - 60, user: a.user }); }
+async function tok() {
+  if (!S) throw new Error("no session");
+  if (S.expires_at < Date.now() / 1000) { const a = await raw("/auth/v1/token?grant_type=refresh_token", { method: "POST", body: { refresh_token: S.refresh_token } }); setSession(a); }
+  return S.access_token;
+}
+const db = async (path, o = {}) => raw("/rest/v1/" + path, { ...o, token: await tok() });
+const rpc = async (fn, args = {}) => raw("/rest/v1/rpc/" + fn, { method: "POST", body: args, token: await tok() });
+const arabicErr = (e) => {
+  const m = e.message || "";
+  if (/Invalid login/i.test(m)) return "البريد أو كلمة السر غير صحيحة";
+  if (/already registered/i.test(m)) return "هذا البريد مسجّل من قبل، سجّل دخولك";
+  if (/no match/i.test(m)) return "الكود أو رقم الموبايل غير مطابق، أو الشركة لم تفعّل دخول الموظفين";
+  if (/already belongs/i.test(m)) return "هذا الحساب مرتبط بشركة بالفعل";
+  if (/not allowed/i.test(m)) return "غير مسموح من إعدادات الشركة";
+  if (/Password should/i.test(m)) return "كلمة السر قصيرة: 6 حروف على الأقل";
+  if (/confirm/i.test(m)) return "أكّد بريدك من الرسالة التي وصلتك ثم سجّل دخولك";
+  return m;
+};
+
+/* ---------------- state ---------------- */
+const st = { me: null, co: null, set: null, emps: [], sessions: [], adv: [], lv: [], links: [], pay: [], tab: "today", month: new Date().toISOString().slice(0, 7) + "-01", mine: null };
+const view = (html) => { $("app").innerHTML = html; };
+const val = (id) => ($(id) ? $(id).value.trim() : "");
+const setErr = (m, ok) => { const e = $("err"); if (e) { e.textContent = m || ""; e.className = "err" + (ok ? " ok" : ""); } };
+
+/* ---------------- auth screens ---------------- */
+function authScreen(mode = "login") {
+  const login = mode === "login";
+  view(`<div class="wrap"><div class="center">
+    <div style="margin-bottom:18px">${LOGO}</div>
+    <h1>${login ? "تسجيل الدخول" : "حساب جديد"}</h1>
+    <div class="sub">${login ? "أهلاً بعودتك" : "ابدأ بالبريد وكلمة السر، وبعدها تنشئ شركتك أو تربط حسابك كموظف."}</div>
+    <label class="f">البريد<input id="em" type="email" dir="ltr" autocomplete="email"></label>
+    <label class="f">كلمة السر<input id="pw" type="password" dir="ltr" autocomplete="${login ? "current-password" : "new-password"}"></label>
+    <div id="err" class="err"></div>
+    <button class="btn p full" id="go">${login ? "دخول" : "إنشاء الحساب"}</button>
+    <div class="sub" style="text-align:center;margin-top:16px">${login ? 'ليس لديك حساب؟ <button class="link" id="sw">حساب جديد</button>' : 'لديك حساب؟ <button class="link" id="sw">تسجيل الدخول</button>'}</div>
+  </div></div>`);
+  $("sw").onclick = () => authScreen(login ? "signup" : "login");
+  $("go").onclick = async () => {
+    setErr(""); const b = $("go"); b.disabled = true;
+    try {
+      const body = { email: val("em"), password: $("pw").value };
+      if (login) { setSession(await raw("/auth/v1/token?grant_type=password", { method: "POST", body })); }
+      else {
+        const r = await raw("/auth/v1/signup", { method: "POST", body });
+        if (r.access_token) setSession(r); else { setErr("وصلتك رسالة تأكيد على البريد. أكّدها ثم سجّل دخولك.", true); b.disabled = false; return; }
+      }
+      boot();
+    } catch (e) { setErr(arabicErr(e)); b.disabled = false; }
+  };
+}
+
+function onboarding() {
+  view(`<div class="wrap"><div class="top">${LOGO}<button class="btn sm" id="out">خروج</button></div>
+    <h1>مرحباً بك</h1><div class="sub">اختر ما يناسبك:</div>
+    <div class="card"><h2>أنا صاحب شركة</h2>
+      <label class="f">اسم الشركة<input id="cn" placeholder="مثال: كافيه Woods"></label>
+      <label class="f">اسمك<input id="fn"></label>
+      <div class="note" style="margin:10px 0">أتعهد بأخذ موافقة مكتوبة من كل موظف قبل تسجيل وجهه.</div>
+      <label style="display:flex;gap:10px;align-items:center;margin:10px 0"><input type="checkbox" id="ag"><span>أوافق</span></label>
+      <button class="btn p full" id="mk">إنشاء الشركة</button></div>
+    <div class="card"><h2>أنا موظف</h2><div class="sub">اطلب كود الشركة من الإدارة.</div>
+      <label class="f">كود الشركة<input id="cc" dir="ltr" placeholder="XXXX-XXXX"></label>
+      <label class="f">رقم موبايلك المسجل عند الشركة<input id="ph" type="tel" dir="ltr"></label>
+      <button class="btn full" id="jn">ربط حسابي</button></div>
+    <div id="err" class="err"></div></div>`);
+  $("out").onclick = logout;
+  $("mk").onclick = async () => {
+    setErr(""); if (!$("ag").checked) return setErr("لازم توافق على التعهد");
+    try { await rpc("create_company", { p_company_name: val("cn"), p_full_name: val("fn") || "المالك" }); boot(); } catch (e) { setErr(arabicErr(e)); }
+  };
+  $("jn").onclick = async () => {
+    setErr("");
+    try { const r = await rpc("claim_employee", { p_code: val("cc"), p_phone: val("ph") }); if (r === "linked") boot(); else pendingScreen(); } catch (e) { setErr(arabicErr(e)); }
+  };
+}
+function pendingScreen() {
+  view(`<div class="wrap"><div class="center"><div style="margin-bottom:18px">${LOGO}</div><h1>تم إرسال طلبك</h1>
+    <div class="sub">بانتظار موافقة الإدارة على ربط حسابك. افتح الصفحة تاني بعد قليل.</div>
+    <button class="btn full" style="margin-top:20px" id="rf">تحديث</button><button class="btn full" style="margin-top:10px" id="out">خروج</button></div></div>`);
+  $("rf").onclick = boot; $("out").onclick = logout;
+}
+function logout() { saveS(null); authScreen("login"); }
+
+/* ---------------- boot ---------------- */
+async function boot() {
+  if (!S) return authScreen("login");
+  try {
+    const me = (await db("profiles?select=*&id=eq." + S.user.id))[0];
+    if (!me) {
+      const lr = await db("employee_link_requests?select=status&user_id=eq." + S.user.id).catch(() => []);
+      return lr[0] && lr[0].status === "pending" ? pendingScreen() : onboarding();
+    }
+    st.me = me;
+    if (me.role === "employee") return loadEmployee();
+    return loadAdmin();
+  } catch (e) { if (e.status === 401 || /JWT|session/i.test(e.message)) return logout(); view(`<div class="wrap"><div class="err">${esc(arabicErr(e))}</div><button class="btn" onclick="boot()">إعادة المحاولة</button></div>`); }
+}
+
+/* ---------------- ADMIN ---------------- */
+async function loadAdmin() {
+  const today0 = new Date(); today0.setHours(0, 0, 0, 0);
+  const [co, set, emps, ses, adv, lv, links] = await Promise.all([
+    db("companies?select=id,name,code&limit=1"), db("company_settings?select=*&limit=1"),
+    db("employees?select=id,full_name,job_title,phone,monthly_salary,shift_start,shift_end,active,user_id&order=full_name"),
+    db("attendance_sessions?select=employee_id,check_in,check_out&or=(check_out.is.null,check_in.gte." + today0.toISOString() + ")"),
+    db("advances?select=*&status=eq.pending&order=created_at"), db("leave_requests?select=*&status=eq.pending&order=created_at"),
+    db("employee_link_requests?select=*&status=eq.pending").catch(() => []),
+  ]);
+  Object.assign(st, { co: co[0], set: set[0], emps, sessions: ses, adv, lv, links });
+  render();
+}
+const nameOf = (id) => (st.emps.find((e) => e.id === id) || {}).full_name || "—";
+function render() {
+  const pend = st.adv.length + st.lv.length + st.links.length;
+  const tabs = [["today", "اليوم", ICON.today], ["req", "الطلبات", ICON.inbox], ["emp", "الموظفون", ICON.users], ["pay", "المرتبات", ICON.cash], ["set", "الإعدادات", ICON.cog]];
+  view(`<div class="wrap"><div class="top">${LOGO}<div class="sub">${esc(st.co.name)}</div></div><div id="body"></div></div>
+   <div class="tabs">${tabs.map(([k, l, i]) => `<button data-t="${k}" class="${st.tab === k ? "on" : ""}">${i}<span>${l}</span>${k === "req" && pend ? `<span class="badge">${pend}</span>` : ""}</button>`).join("")}</div>`);
+  document.querySelectorAll(".tabs button").forEach((b) => (b.onclick = () => { st.tab = b.dataset.t; render(); }));
+  ({ today: tabToday, req: tabReq, emp: tabEmp, pay: tabPay, set: tabSet })[st.tab]();
+}
+function statusOf(e) {
+  const ss = st.sessions.filter((s) => s.employee_id === e.id).sort((a, b) => new Date(b.check_in) - new Date(a.check_in));
+  const s = ss[0];
+  if (!s) return { k: "absent", chip: '<span class="chip c-gray">لم يحضر</span>', sub: `شيفته ${e.shift_start.slice(0, 5)}` };
+  const [h, m] = e.shift_start.split(":").map(Number), ci = new Date(s.check_in), late = ci.getHours() * 60 + ci.getMinutes() - (h * 60 + m) > (st.set.late_grace_minutes || 0);
+  if (!s.check_out) return { k: "in", chip: `<span class="chip ${late ? "c-amber" : "c-green"}">${late ? "متأخر · " : ""}داخل</span>`, sub: "حضر " + hhmm(s.check_in) };
+  return { k: "out", chip: '<span class="chip c-gray">انصرف</span>', sub: `${hhmm(s.check_in)} → ${hhmm(s.check_out)}` };
+}
+function tabToday() {
+  const act = st.emps.filter((e) => e.active), rows = act.map((e) => ({ e, s: statusOf(e) }));
+  const inN = rows.filter((r) => r.s.k === "in").length, ab = rows.filter((r) => r.s.k === "absent").length;
+  $("body").innerHTML = `<h1>اليوم</h1><div class="stats"><div class="stat"><span>داخل الآن</span><div>${inN}</div></div><div class="stat"><span>لم يحضر</span><div>${ab}</div></div><div class="stat"><span>تنتظر موافقتك</span><div>${st.adv.length + st.lv.length}</div></div></div>
+   <div class="card">${rows.length ? rows.map(({ e, s }) => `<div class="row"><div class="grow"><b>${esc(e.full_name)}</b><small>${esc(s.sub)}</small></div>${s.chip}</div>`).join("") : '<div class="sub">لا يوجد موظفون بعد. أضفهم من تبويب الموظفون.</div>'}</div>`;
+}
+async function decide(table, id, ok) {
+  try { await db(`${table}?id=eq.${id}`, { method: "PATCH", body: { status: ok ? "approved" : "rejected", decided_by: S.user.id, decided_at: new Date().toISOString() } }); await loadAdmin(); } catch (e) { alert(arabicErr(e)); }
+}
+function tabReq() {
+  const item = (t, id, name, what) => `<div class="row"><div class="grow"><b>${esc(name)}</b><small>${esc(what)}</small></div><button class="btn p sm" data-d="${t}|${id}|1">موافقة</button><button class="btn sm" data-d="${t}|${id}|0">رفض</button></div>`;
+  const body = st.adv.map((a) => item("advances", a.id, nameOf(a.employee_id), `سلفة ${money(a.amount)} ج.م · تُخصم من ${String(a.repay_month).slice(0, 7)}`)).join("")
+    + st.lv.map((l) => item("leave_requests", l.id, nameOf(l.employee_id), `إجازة من ${l.from_date} إلى ${l.to_date}`)).join("");
+  const links = st.links.map((l) => `<div class="row"><div class="grow"><b>${esc(nameOf(l.employee_id))}</b><small>يطلب ربط حسابه بموبايله</small></div><button class="btn p sm" data-l="${l.id}|1">قبول</button><button class="btn sm" data-l="${l.id}|0">رفض</button></div>`).join("");
+  $("body").innerHTML = `<h1>الطلبات</h1><div class="card"><h2>سلف وإجازات</h2>${body || '<div class="sub">لا توجد طلبات.</div>'}</div>${links ? `<div class="card"><h2>ربط الموظفين بحساباتهم</h2>${links}</div>` : ""}`;
+  document.querySelectorAll("[data-d]").forEach((b) => (b.onclick = () => { const [t, id, ok] = b.dataset.d.split("|"); decide(t, id, ok === "1"); }));
+  document.querySelectorAll("[data-l]").forEach((b) => (b.onclick = async () => { const [id, ok] = b.dataset.l.split("|"); try { await rpc("decide_employee_link", { p_request: id, p_approve: ok === "1" }); await loadAdmin(); } catch (e) { alert(arabicErr(e)); } }));
+}
+function tabEmp() {
+  $("body").innerHTML = `<h1>الموظفون</h1><div class="card"><h2>إضافة موظف</h2>
+    <label class="f">الاسم<input id="en"></label>
+    <div class="grid2"><label class="f">الوظيفة<input id="ej"></label><label class="f">الموبايل<input id="ep" type="tel" dir="ltr"></label></div>
+    <label class="f">المرتب الشهري (ج.م)<input id="es" type="number" inputmode="decimal"></label>
+    <div class="grid2"><label class="f">يبدأ الشغل<input id="ef" type="time" value="09:00"></label><label class="f">ينتهي<input id="et" type="time" value="17:00"></label></div>
+    <div class="sub" id="eh">لو الوقت يعدّي منتصف الليل (مثل 18:00 إلى 02:00) يتحسب تلقائياً.</div>
+    <div id="err" class="err"></div><button class="btn p full" id="ea">إضافة</button></div>
+   <div class="card">${st.emps.map((e) => `<div class="row"><div class="grow"><b>${esc(e.full_name)}</b><small>${esc(e.job_title || "")} ${e.shift_start.slice(0, 5)} → ${e.shift_end.slice(0, 5)} · ${money(e.monthly_salary)} ج.م</small></div><span class="chip ${e.user_id ? "c-green" : "c-gray"}">${e.user_id ? "ربط الموبايل" : "من الجهاز فقط"}</span></div>`).join("") || '<div class="sub">لا يوجد موظفون.</div>'}</div>`;
+  $("ea").onclick = async () => {
+    setErr("");
+    if (!val("en") || !(Number(val("es")) >= 0) || !val("es")) return setErr("اكتب الاسم والمرتب");
+    try { await db("employees", { method: "POST", body: { company_id: st.co.id, full_name: val("en"), job_title: val("ej") || null, phone: val("ep") || null, monthly_salary: Number(val("es")), shift_start: val("ef"), shift_end: val("et") } }); await loadAdmin(); } catch (e) { setErr(arabicErr(e)); }
+  };
+}
+async function tabPay() {
+  $("body").innerHTML = `<h1>المرتبات</h1><div class="card"><label class="f">الشهر<input id="pm" type="month" value="${st.month.slice(0, 7)}"></label><div id="pt" class="sub">جاري الحساب…</div></div>`;
+  $("pm").onchange = () => { st.month = $("pm").value + "-01"; tabPay(); };
+  try {
+    const rows = await Promise.all(st.emps.filter((e) => e.active).map(async (e) => { const r = await rpc("payroll_month", { p_employee: e.id, p_month: st.month }); return { e, r: Array.isArray(r) ? r[0] : r }; }));
+    const sum = rows.reduce((a, x) => a + Number(x.r?.net_pay || 0), 0);
+    $("pt").className = ""; $("pt").innerHTML = `<table><tr><th>الموظف</th><th>الأساسي</th><th>إضافي</th><th>خصومات</th><th>سلف</th><th>الصافي</th></tr>${rows.map(({ e, r }) => {
+      const ded = Number(r.late_deduction) + Number(r.early_leave_deduction) + Number(r.absence_deduction) + Number(r.deductions) + Number(r.penalties_applied) + Number(r.insurance) + Number(r.income_tax);
+      return `<tr><td>${esc(e.full_name)}</td><td class="n">${money(r.base_pay)}</td><td class="n">${money(Number(r.overtime_pay) + Number(r.rest_day_pay) + Number(r.bonuses))}</td><td class="n">${money(ded)}</td><td class="n">${money(r.advances_deducted)}</td><td class="n"><b>${money(r.net_pay)}</b></td></tr>`; }).join("")}
+      <tr><td><b>الإجمالي</b></td><td></td><td></td><td></td><td></td><td class="n"><b>${money(sum)}</b></td></tr></table>`;
+  } catch (e) { $("pt").innerHTML = `<span class="err">${esc(arabicErr(e))}</span>`; }
+}
+function tabSet() {
+  const s = st.set, tg = (k, l, sub = "") => `<label class="row" style="cursor:pointer"><div class="grow"><b>${l}</b>${sub ? `<small>${sub}</small>` : ""}</div><input type="checkbox" data-k="${k}" ${s[k] ? "checked" : ""}></label>`;
+  const num = (k, l, u) => `<div class="row"><div class="grow"><b>${l}</b></div><input type="number" step="any" data-n="${k}" value="${s[k] ?? ""}" style="width:110px;text-align:center"><span class="sub" style="width:40px">${u}</span></div>`;
+  $("body").innerHTML = `<h1>الإعدادات</h1>
+   <div class="card"><div class="sub">كود شركتك (يعطيه الموظف عند ربط موبايله)</div><div class="code">${esc(st.co.code)}</div></div>
+   <div class="card"><h2>تطبيق الموظف على موبايله</h2><div class="sub" style="margin-bottom:6px">اختياري. الحضور يبقى من الجهاز فقط.</div>
+     ${tg("employee_app_enabled", "السماح للموظفين بالدخول من موبايلهم")}${tg("employee_auto_link", "ربط تلقائي إذا تطابق رقم الموبايل", "بدون موافقتك")}${tg("employee_see_salary", "يشوف الموظف مرتبه")}${tg("employee_can_request_advance", "يطلب سلفة")}${tg("employee_can_request_leave", "يطلب إجازة")}</div>
+   <div class="card"><h2>الضرائب والتأمينات</h2><div class="sub" style="margin-bottom:6px">مقفولة افتراضياً ولا يُخصم منها شيء.</div>${tg("apply_income_tax", "خصم ضريبة المرتبات")}${tg("apply_insurance", "خصم التأمينات الاجتماعية")}</div>
+   <div class="card"><h2>الأرقام (كلها بيدك)</h2><div class="sub" style="margin-bottom:6px">القانون مجرد مرجع ولا يُفرض عليك.</div>
+     ${num("late_grace_minutes", "سماح التأخير", "دقيقة")}${num("overtime_day_pct", "الإضافي النهاري", "%")}${num("overtime_night_pct", "الإضافي الليلي", "%")}${num("rest_day_extra_pct", "الزيادة في يوم الراحة", "%")}${num("min_match_score", "حساسية التعرف على الوجه", "0-1")}</div>
+   <div id="err" class="err"></div><button class="btn p full" id="sv">حفظ</button>
+   <div style="height:14px"></div><button class="btn full" id="out">تسجيل الخروج</button>`;
+  $("out").onclick = logout;
+  $("sv").onclick = async () => {
+    setErr(""); const body = {};
+    document.querySelectorAll("[data-k]").forEach((i) => (body[i.dataset.k] = i.checked));
+    document.querySelectorAll("[data-n]").forEach((i) => { if (i.value !== "") body[i.dataset.n] = Number(i.value); });
+    try { await db("company_settings?company_id=eq." + st.co.id, { method: "PATCH", body }); Object.assign(st.set, body); setErr("تم الحفظ ✓", true); } catch (e) { setErr(arabicErr(e)); }
+  };
+}
+
+/* ---------------- EMPLOYEE (optional phone view) ---------------- */
+async function loadEmployee() {
+  try {
+    const me = await rpc("my_employee");
+    if (!me || !me[0]) { view(`<div class="wrap"><div class="top">${LOGO}<button class="btn sm" id="out">خروج</button></div><h1>غير متاح الآن</h1><div class="sub">الشركة أوقفت دخول الموظفين من الموبايل.</div></div>`); $("out").onclick = logout; return; }
+    st.mine = me[0];
+    const [pay, adv, lv, ses] = await Promise.all([
+      st.mine.can_see_salary ? rpc("my_payroll", { p_month: st.month }).catch(() => null) : null,
+      db("advances?select=*&order=created_at.desc&limit=8"), db("leave_requests?select=*&order=created_at.desc&limit=8"),
+      db("attendance_sessions?select=check_in,check_out&order=check_in.desc&limit=7"),
+    ]);
+    renderEmployee(pay, adv, lv, ses);
+  } catch (e) { view(`<div class="wrap"><div class="err">${esc(arabicErr(e))}</div></div>`); }
+}
+const stChip = (s) => `<span class="chip ${s === "approved" ? "c-green" : s === "rejected" ? "c-red" : "c-amber"}">${s === "approved" ? "تمت الموافقة" : s === "rejected" ? "مرفوض" : "بانتظار الموافقة"}</span>`;
+function renderEmployee(pay, adv, lv, ses) {
+  const m = st.mine, nm = m.full_name.split(" ")[0], row = (l, v, c = "") => `<div class="row"><div class="grow">${l}</div><b style="${c}">${v}</b></div>`;
+  view(`<div class="wrap"><div class="top">${LOGO}<button class="btn sm" id="out">خروج</button></div>
+   <div class="sub">أهلاً</div><h1>${esc(nm)} · ${esc(m.company_name)}</h1>
+   ${pay ? `<div class="net"><small>صافي مرتبك حتى اليوم</small><div>${money(pay.net_pay)} <span style="font-size:20px">ج.م</span></div></div>
+   <div class="card">${row("الأجر الأساسي", money(pay.base_pay) + " ج.م")}${row("خصم التأخير", "- " + money(Number(pay.late_deduction) + Number(pay.early_leave_deduction)) + " ج.م", "color:var(--red)")}${row("الإضافي", "+ " + money(Number(pay.overtime_pay) + Number(pay.rest_day_pay)) + " ج.م", "color:var(--green)")}${row("سلفة تُخصم", "- " + money(pay.advances_deducted) + " ج.م", "color:var(--red)")}</div>` : ""}
+   <div class="grid2">${m.can_request_advance ? `<div class="card"><h2>طلب سلفة</h2><label class="f">المبلغ<input id="aa" type="number" inputmode="numeric"></label><button class="btn p full" id="as">إرسال</button></div>` : ""}
+   ${m.can_request_leave ? `<div class="card"><h2>طلب إجازة</h2><div class="grid2"><label class="f">من<input id="lf" type="date"></label><label class="f">إلى<input id="lt" type="date"></label></div><button class="btn p full" id="ls">إرسال</button></div>` : ""}</div>
+   <div id="err" class="err"></div>
+   <div class="card"><h2>طلباتي</h2>${[...adv.map((a) => `<div class="row"><div class="grow"><b>سلفة ${money(a.amount)} ج.م</b></div>${stChip(a.status)}</div>`), ...lv.map((l) => `<div class="row"><div class="grow"><b>إجازة ${l.from_date} → ${l.to_date}</b></div>${stChip(l.status)}</div>`)].join("") || '<div class="sub">لا توجد طلبات.</div>'}</div>
+   <div class="card"><h2>حضوري</h2>${ses.map((s) => `<div class="row"><div class="grow"><b>${new Date(s.check_in).toLocaleDateString("ar-EG", { weekday: "long", day: "numeric", month: "short" })}</b></div><span class="sub">${hhmm(s.check_in)}${s.check_out ? " → " + hhmm(s.check_out) : " (داخل)"}</span></div>`).join("") || '<div class="sub">لا يوجد حضور مسجّل.</div>'}</div>
+   <div class="note">الحضور والانصراف يتسجلان بوجهك من الجهاز عند الباب فقط.</div></div>`);
+  $("out").onclick = logout;
+  if ($("as")) $("as").onclick = async () => { setErr(""); const n = Number(val("aa")); if (!(n > 0)) return setErr("اكتب مبلغاً"); const d = new Date(); d.setMonth(d.getMonth() + 1);
+    try { await rpc("request_advance", { p_amount: n, p_repay_month: d.toISOString().slice(0, 7) + "-01" }); loadEmployee(); } catch (e) { setErr(arabicErr(e)); } };
+  if ($("ls")) $("ls").onclick = async () => { setErr(""); if (!val("lf") || !val("lt") || val("lt") < val("lf")) return setErr("اختر تاريخاً صحيحاً");
+    try { await rpc("request_leave", { p_from: val("lf"), p_to: val("lt"), p_kind: "annual" }); loadEmployee(); } catch (e) { setErr(arabicErr(e)); } };
+}
+
+boot();
+</script>
+</body>
+</html>
