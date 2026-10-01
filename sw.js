@@ -1,5 +1,5 @@
 // Offline shell: everything the kiosk needs (including the face models) is cached after the first load.
-const V = "mogzy-v2";
+const V = "mogzy-v3";
 const FILES = ["./","index.html","app.js","config.js","manifest.json","logo.png","face-api.js",
   "tiny_face_detector_model-weights_manifest.json","tiny_face_detector_model.bin",
   "face_landmark_68_model-weights_manifest.json","face_landmark_68_model.bin",

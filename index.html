@@ -66,6 +66,27 @@ input.t,select.t{height:64px;border-radius:16px;border:1.5px solid var(--btn);ba
 .list{display:flex;flex-direction:column;gap:8px;overflow:auto;max-height:420px}
 .emp{display:flex;justify-content:space-between;align-items:center;padding:0 18px;height:60px;border-radius:14px;border:1.5px solid var(--line);background:#fff;font:500 22px 'IBM Plex Sans Arabic',sans-serif;cursor:pointer}
 .emp.sel{border-color:var(--ink);background:var(--soft)}
+img{-webkit-touch-callout:none;-webkit-user-drag:none}
+@media (max-width:900px),(orientation:portrait){
+ .screen{padding:16px 18px}
+ h1{font-size:30px}
+ .scanwrap{flex-direction:column;gap:18px;justify-content:center}
+ .cam{width:100%;max-width:520px;height:min(62vw,420px);min-height:280px}
+ .oval{width:46%;height:82%}
+ .msg{align-items:center;text-align:center;max-width:100%}
+ .clock{font-size:60px;text-align:center}
+ .status{font-size:26px}.status.chal{font-size:32px}
+ .grid{grid-template-columns:1fr}
+ .tile{padding:0 24px}.tile b{font-size:28px}
+ .hello{font-size:30px}
+ .panel{padding:18px}
+ .panel[style*="display:flex"]{flex-wrap:wrap}
+ .keys{grid-template-columns:repeat(3,80px)}
+ .bigamt{font-size:52px}
+ #s-admin>#ad-main{flex-direction:column}
+ #s-admin #ad-main>div{width:100% !important}
+ .net div{font-size:52px}
+}
 </style>
 </head>
 <body>

@@ -274,7 +274,9 @@ $("su-go").onclick = async () => {
 
 /* ---------- admin: enroll faces (hidden: press the logo for 2 seconds) ---------- */
 let adm = null, pick = null, shots = [];
-let pressT; $("logo").addEventListener("pointerdown", () => { pressT = setTimeout(openAdmin, 2000); });
+let pressT, taps = [];
+$("logo").addEventListener("pointerdown", () => { pressT = setTimeout(openAdmin, 2000);
+  const t = Date.now(); taps = taps.filter((x) => t - x < 2500); taps.push(t); if (taps.length >= 5) { taps = []; openAdmin(); } });
 ["pointerup", "pointerleave"].forEach((ev) => $("logo").addEventListener(ev, () => clearTimeout(pressT)));
 async function openAdmin() {
   mode = "admin"; show("admin"); adm = null; $("ad-login").style.display = "flex"; $("ad-main").style.display = "none"; $("ad-err").textContent = "";
