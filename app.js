@@ -86,9 +86,9 @@ async function pickBackend() {
 }
 async function loadModels() {
   window.__backend = await pickBackend();
-  await faceapi.nets.tinyFaceDetector.loadFromUri("models");
-  await faceapi.nets.faceLandmark68Net.loadFromUri("models");
-  await faceapi.nets.faceRecognitionNet.loadFromUri("models");
+  await faceapi.nets.tinyFaceDetector.loadFromUri(".");
+  await faceapi.nets.faceLandmark68Net.loadFromUri(".");
+  await faceapi.nets.faceRecognitionNet.loadFromUri(".");
 }
 const detect = (el, withDesc) => { const t = faceapi.detectAllFaces(el, opts()).withFaceLandmarks(); return withDesc ? t.withFaceDescriptors() : t; };
 
