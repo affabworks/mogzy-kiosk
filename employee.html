@@ -28,6 +28,7 @@ h1{font-size:clamp(24px,5vw,30px);font-weight:600;margin:12px 0 14px;letter-spac
 h2{font-size:18px;font-weight:600;margin:0 0 10px}
 .sub{color:var(--mute);font-size:15px;line-height:1.7}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:22px;padding:18px 20px;margin:14px 0;box-shadow:var(--shadow)}
+.shot{width:48px;height:48px;border-radius:12px;background:var(--line) center/cover;flex:none;display:grid;place-items:center;color:var(--mute);cursor:pointer}
 .row{display:flex;align-items:center;gap:12px;min-height:60px;border-bottom:1px solid var(--line)}
 .row:last-child{border:none}.row .grow{flex:1;min-width:0}
 .row b{font-weight:600}.row small{color:var(--mute);font-size:14px;display:block;line-height:1.6}
@@ -220,19 +221,20 @@ async function boot() {
 /* ---------------- ADMIN ---------------- */
 async function loadAdmin() {
   const today0 = new Date(); today0.setHours(0, 0, 0, 0);
-  const [co, set, emps, ses, adv, lv, links] = await Promise.all([
+  const [co, set, emps, ses, adv, lv, links, evs] = await Promise.all([
     db("companies?select=id,name,code&limit=1"), db("company_settings?select=*&limit=1"),
     db("employees?select=id,full_name,job_title,phone,monthly_salary,shift_start,shift_end,active,user_id&order=full_name"),
     db("attendance_sessions?select=employee_id,check_in,check_out&or=(check_out.is.null,check_in.gte." + today0.toISOString() + ")"),
     db("advances?select=*&status=eq.pending&order=created_at"), db("leave_requests?select=*&status=eq.pending&order=created_at"),
     db("employee_link_requests?select=*&status=eq.pending").catch(() => []),
+    db("attendance_events?select=id,employee_id,kind,occurred_at,ai_reason,snapshot_path&ai_verdict=eq.suspicious&order=occurred_at.desc&limit=20").catch(() => []),
   ]);
-  Object.assign(st, { co: co[0], set: set[0], emps, sessions: ses, adv, lv, links });
+  Object.assign(st, { co: co[0], set: set[0], emps, sessions: ses, adv, lv, links, flags: evs });
   render();
 }
 const nameOf = (id) => (st.emps.find((e) => e.id === id) || {}).full_name || "—";
 function render() {
-  const pend = st.adv.length + st.lv.length + st.links.length;
+  const pend = st.adv.length + st.lv.length + st.links.length + (st.flags || []).length;
   const tabs = [["today", "اليوم", ICON.today], ["req", "الطلبات", ICON.inbox], ["emp", "الموظفون", ICON.users], ["pay", "المرتبات", ICON.cash], ["set", "الإعدادات", ICON.cog]];
   view(`<div class="wrap"><div class="top">${LOGO}<div class="sub">${esc(st.co.name)}</div></div><div id="body"></div></div>
    <div class="tabs">${tabs.map(([k, l, i]) => `<button data-t="${k}" class="${st.tab === k ? "on" : ""}">${i}<span>${l}</span>${k === "req" && pend ? `<span class="badge">${pend}</span>` : ""}</button>`).join("")}</div>`);
@@ -253,6 +255,21 @@ function tabToday() {
   $("body").innerHTML = `<h1>اليوم</h1><div class="stats"><div class="stat"><span>داخل الآن</span><div>${inN}</div></div><div class="stat"><span>لم يحضر</span><div>${ab}</div></div><div class="stat"><span>تنتظر موافقتك</span><div>${st.adv.length + st.lv.length}</div></div></div>
    <div class="card">${rows.length ? rows.map(({ e, s }) => `<div class="row"><div class="grow"><b>${esc(e.full_name)}</b><small>${esc(s.sub)}</small></div>${s.chip}</div>`).join("") : '<div class="sub">لا يوجد موظفون بعد. أضفهم من تبويب الموظفون.</div>'}</div>`;
 }
+async function loadShots() {
+  const t = await tok();
+  document.querySelectorAll(".shot[data-p]").forEach(async (el) => {
+    const path = el.dataset.p; if (!path) return;
+    try {
+      const r = await fetch(CFG.url + "/storage/v1/object/authenticated/snapshots/" + path, { headers: { apikey: CFG.key, authorization: "Bearer " + t } });
+      if (!r.ok) return; const url = URL.createObjectURL(await r.blob());
+      el.style.backgroundImage = `url(${url})`; el.onclick = () => bigShot(url);
+    } catch {}
+  });
+}
+function bigShot(url) {
+  const o = document.createElement("div"); o.style.cssText = "position:fixed;inset:0;background:rgba(31,27,23,.82);display:grid;place-items:center;z-index:99;padding:20px";
+  o.innerHTML = `<img src="${url}" style="max-width:100%;max-height:100%;border-radius:16px">`; o.onclick = () => o.remove(); document.body.appendChild(o);
+}
 async function decide(table, id, ok) {
   try { await db(`${table}?id=eq.${id}`, { method: "PATCH", body: { status: ok ? "approved" : "rejected", decided_by: S.user.id, decided_at: new Date().toISOString() } }); await loadAdmin(); } catch (e) { alert(arabicErr(e)); }
 }
@@ -261,8 +278,11 @@ function tabReq() {
   const body = st.adv.map((a) => item("advances", a.id, nameOf(a.employee_id), `سلفة ${money(a.amount)} ج.م · تُخصم من ${String(a.repay_month).slice(0, 7)}`)).join("")
     + st.lv.map((l) => item("leave_requests", l.id, nameOf(l.employee_id), `إجازة من ${l.from_date} إلى ${l.to_date}`)).join("");
   const links = st.links.map((l) => `<div class="row"><div class="grow"><b>${esc(nameOf(l.employee_id))}</b><small>يطلب ربط حسابه بموبايله</small></div><button class="btn p sm" data-l="${l.id}|1">قبول</button><button class="btn sm" data-l="${l.id}|0">رفض</button></div>`).join("");
-  $("body").innerHTML = `<h1>الطلبات</h1><div class="card"><h2>سلف وإجازات</h2>${body || '<div class="sub">لا توجد طلبات.</div>'}</div>${links ? `<div class="card"><h2>ربط الموظفين بحساباتهم</h2>${links}</div>` : ""}`;
+  const flags = (st.flags || []).map((f) => `<div class="row"><div class="shot" data-p="${esc(f.snapshot_path || "")}">${f.snapshot_path ? "" : "—"}</div><div class="grow"><b>${esc(nameOf(f.employee_id))}</b><small>${f.kind === "in" ? "حضور" : "انصراف"} ${hhmm(f.occurred_at)} · ${new Date(f.occurred_at).toLocaleDateString("en-GB")}<br>${esc(f.ai_reason || "بصمة تحتاج نظرة")}</small></div><button class="btn sm" data-f="${f.id}">تمام</button></div>`).join("");
+  $("body").innerHTML = `<h1>الطلبات</h1>${flags ? `<div class="card" style="border:1px solid var(--gold)"><h2>تنبيه: بصمة مشبوهة</h2>${flags}</div>` : ""}<div class="card"><h2>سلف وإجازات</h2>${body || '<div class="sub">لا توجد طلبات.</div>'}</div>${links ? `<div class="card"><h2>ربط الموظفين بحساباتهم</h2>${links}</div>` : ""}`;
   document.querySelectorAll("[data-d]").forEach((b) => (b.onclick = () => { const [t, id, ok] = b.dataset.d.split("|"); decide(t, id, ok === "1"); }));
+  document.querySelectorAll("[data-f]").forEach((b) => (b.onclick = async () => { try { await rpc("dismiss_flag", { p_event: b.dataset.f }); await loadAdmin(); } catch (e) { alert(arabicErr(e)); } }));
+  loadShots();
   document.querySelectorAll("[data-l]").forEach((b) => (b.onclick = async () => { const [id, ok] = b.dataset.l.split("|"); try { await rpc("decide_employee_link", { p_request: id, p_approve: ok === "1" }); await loadAdmin(); } catch (e) { alert(arabicErr(e)); } }));
 }
 function tabEmp() {

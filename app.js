@@ -235,7 +235,7 @@ async function challenge(emp, firstDist) {
     passive = "passive:" + (mv === null ? "na" : mv.toFixed(4));
     if (mv !== null && mv < MOTION_MIN) { mode = "scan"; oval(); setStatus("لم يتأكد الجهاز أنك شخص حقيقي", "انظر للكاميرا بشكل طبيعي وحاول مرة أخرى.", "warn"); await sleep(2200); return resumeScan(); }
   }
-  cur = { emp, score, challenge: passive };
+  cur = { emp, score, challenge: passive, shot: snapshot() };
   openMenu();
 }
 function resumeScan() { clearTimeout(scanTimer); sc.hold = 0; sc.goneAt = 0; scReset(); mode = "scan"; oval(); setStatus("قف أمام الكاميرا", "انظر للكاميرا مباشرة وسيتعرف عليك الجهاز."); scanTimer = setTimeout(scanLoop, 0); }
@@ -250,13 +250,22 @@ function openMenu() {
   $("m-punch-t").textContent = inside ? "تسجيل انصراف" : "تسجيل حضور";
   $("m-punch-s").textContent = inside ? "حضرت " + new Date(e.open_since).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }) : "ابدأ يومك";
 }
+/* Small JPEG of whoever is at the door, kept with the punch for the manager's review. */
+function snapshot() {
+  try {
+    const v = $("video"); if (!v.videoWidth) return null;
+    const w = 240, h = Math.round(w * v.videoHeight / v.videoWidth), c = document.createElement("canvas"); c.width = w; c.height = h;
+    c.getContext("2d").drawImage(v, 0, 0, w, h); return c.toDataURL("image/jpeg", 0.6);
+  } catch { return null; }
+}
 async function punch() {
   const e = cur.emp, inside = !!e.open_since, t = now();
   const last = LS.get("last_" + e.id, 0);
   if (Date.now() - last < 120000) { $("m-punch-s").textContent = "سجّلت قبل لحظات"; return; }
   const ev = { client_event_id: crypto.randomUUID(), employee_id: e.id, kind: inside ? "out" : "in", occurred_at: t.toISOString(),
-    match_score: Number(cur.score.toFixed(3)), liveness_challenge: cur.challenge, liveness_passed: true };
-  LS.set("qe", [...qE(), ev]); LS.set("last_" + e.id, Date.now());
+    match_score: Number(cur.score.toFixed(3)), liveness_challenge: cur.challenge, liveness_passed: true, snapshot: cur.shot || null };
+  const q = [...qE(), ev]; if (q.length > 30) q.forEach((x, i) => { if (i < q.length - 5) delete x.snapshot; }); /* keep offline storage small */
+  LS.set("qe", q); LS.set("last_" + e.id, Date.now());
   e.open_since = inside ? null : ev.occurred_at; LS.set("cache", cache);
   netBadge(navigator.onLine); flush();
   finish(inside ? "تم تسجيل انصرافك" : "تم تسجيل حضورك", `${e.full_name} · ${t.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`);
