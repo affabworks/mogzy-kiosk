@@ -5,6 +5,10 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
 <meta name="theme-color" content="#F7F4EF">
 <link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Mogzy">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
 <title>Mogzy</title>
@@ -86,6 +90,24 @@ img{-webkit-touch-callout:none;-webkit-user-drag:none}
  #s-admin>#ad-main{flex-direction:column}
  #s-admin #ad-main>div{width:100% !important}
  .net div{font-size:52px}
+}
+
+/* --- phone/tablet fit: screens scroll, action buttons stay visible --- */
+.screen{overflow-y:auto;overflow-x:hidden;height:100vh;height:100dvh;bottom:auto}
+#adv-go,#lv-go{position:sticky;bottom:10px;flex-shrink:0;box-shadow:0 -10px 14px 6px var(--bg)}
+.key{color:var(--ink)}
+#adv-keys{margin:0 auto}
+@media (max-width:900px),(orientation:portrait){
+ #s-advance .panel{flex-direction:column;gap:14px !important;align-items:stretch !important}
+ #s-advance .chip{height:54px;min-width:0;flex:1 1 40%;font-size:22px}
+ #s-advance .bigamt{font-size:44px}
+ .keys{grid-template-columns:repeat(3,1fr);width:100%;max-width:360px;gap:8px}
+ .key{height:56px;font-size:26px}
+ #s-leave .panel>div:first-child{flex-direction:column}
+ .btn{height:64px;font-size:22px}
+}
+@media (max-height:620px) and (orientation:landscape){
+ .key{height:52px}.keys{grid-template-columns:repeat(3,76px)}.chip{height:56px}.bigamt{font-size:52px}
 }
 </style>
 </head>
