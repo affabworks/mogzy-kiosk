@@ -176,6 +176,7 @@ async function scanLoop() {
 }
 
 /* ---------- liveness: random head turn / blink, then re-verify the same person ---------- */
+const MOTION_MIN = 0.004;
 const CH = {
   turn_right: { text: "حرّك رأسك ببطء لليمين", test: (lm) => yaw(lm) < 0.38 },
   turn_left:  { text: "حرّك رأسك ببطء لليسار", test: (lm) => yaw(lm) > 0.62 },
@@ -205,18 +206,36 @@ async function reverify(emp, minScore, ms = 5000) {
   }
   return got.length >= 2 ? got.reduce((a, b) => a + b, 0) / got.length : null;
 }
+/* Passive anti-photo check: a real face deforms a little (eyes, mouth, cheeks) even when "still";
+   a photo only moves rigidly. Align every frame to the first one (rotation+scale+shift) and measure what is left. */
+function flex(frames) {
+  const norm = (lm) => { const p = lm.map((q) => [q.x, q.y]); const cx = p.reduce((a, q) => a + q[0], 0) / p.length, cy = p.reduce((a, q) => a + q[1], 0) / p.length; const q = p.map((a) => [a[0] - cx, a[1] - cy]); const sc = Math.sqrt(q.reduce((a, b) => a + b[0] * b[0] + b[1] * b[1], 0) / q.length) || 1; return q.map((a) => [a[0] / sc, a[1] / sc]); };
+  const N = frames.map(norm), R = N[0];
+  const al = N.map((P) => { let a = 0, b = 0; for (let i = 0; i < P.length; i++) { a += P[i][0] * R[i][0] + P[i][1] * R[i][1]; b += P[i][0] * R[i][1] - P[i][1] * R[i][0]; } const h = Math.hypot(a, b) || 1, c = a / h, s = b / h; return P.map((q) => [q[0] * c - q[1] * s, q[0] * s + q[1] * c]); });
+  const n = R.length; let tot = 0;
+  for (let i = 0; i < n; i++) { const mx = al.reduce((a, P) => a + P[i][0], 0) / al.length, my = al.reduce((a, P) => a + P[i][1], 0) / al.length; tot += al.reduce((a, P) => a + Math.hypot(P[i][0] - mx, P[i][1] - my), 0) / al.length; }
+  return tot / n;
+}
+async function motionScore(ms = 2600) {
+  const t0 = Date.now(), fr = [];
+  while (Date.now() - t0 < ms) { const r = await detect($("video"), false); if (r.length === 1) fr.push(r[0].landmarks.positions.map((q) => ({ x: q.x, y: q.y }))); await sleep(40); }
+  return fr.length >= 6 ? flex(fr) : null;
+}
 async function challenge(emp, firstDist) {
   mode = "challenge";
   const st = cache.settings, minScore = Number(st.min_match_score), required = st.liveness_required !== false;
-  let score = 1 - firstDist;
+  let score = 1 - firstDist, passive = null;
   if (required) {
     /* passive check only: no movement asked. Several strict frontal frames must all match the same person. */
     oval("ok"); setStatus("انظر للكاميرا مباشرة", `أهلاً ${emp.full_name.split(" ")[0]}`, "");
     const d = await reverify(emp, minScore, 4000);
     if (d === null) { mode = "scan"; oval(); setStatus("لم يتطابق الوجه", "حاول من جديد.", "warn"); await sleep(1500); return resumeScan(); }
     score = Math.min(score, 1 - d);
+    const mv = window.__motion !== undefined ? window.__motion : await motionScore();
+    passive = "passive:" + (mv === null ? "na" : mv.toFixed(4));
+    if (mv !== null && mv < MOTION_MIN) { mode = "scan"; oval(); setStatus("لم يتأكد الجهاز أنك شخص حقيقي", "انظر للكاميرا بشكل طبيعي وحاول مرة أخرى.", "warn"); await sleep(2200); return resumeScan(); }
   }
-  cur = { emp, score, challenge: required ? "passive" : null };
+  cur = { emp, score, challenge: passive };
   openMenu();
 }
 function resumeScan() { clearTimeout(scanTimer); sc.hold = 0; sc.goneAt = 0; scReset(); mode = "scan"; oval(); setStatus("قف أمام الكاميرا", "انظر للكاميرا مباشرة وسيتعرف عليك الجهاز."); scanTimer = setTimeout(scanLoop, 0); }
