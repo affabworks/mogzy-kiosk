@@ -59,7 +59,7 @@ table{width:100%;border-collapse:collapse;font-size:15px}th,td{padding:10px 6px;
 <body>
 <div id="app"></div>
 <script src="config.js"></script>
-<script>window.MOGZY_MODE="emp";</script>
+<script>window.MOGZY_START="emp";</script>
 <script>
 "use strict";
 const CFG = window.MOGZY, $ = (id) => document.getElementById(id);
@@ -74,7 +74,6 @@ const ICON = {
   cog: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h10M18 7h2M4 17h2M10 17h10M14 4v6M6 14v6"/></svg>',
   clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
 };
-const MODE = window.MOGZY_MODE || "admin", EMP = MODE === "emp";
 const INVITE = (new URLSearchParams(location.search).get("code") || "").toUpperCase();
 const LOGO = '<img src="logo.png" alt="Mogzy">';
 
@@ -117,65 +116,77 @@ const val = (id) => ($(id) ? $(id).value.trim() : "");
 const setErr = (m, ok) => { const e = $("err"); if (e) { e.textContent = m || ""; e.className = "err" + (ok ? " ok" : ""); } };
 
 /* ---------------- auth screens ---------------- */
-function authScreen(mode = "login") {
-  const login = mode === "login";
-  view(`<div class="wrap"><div class="center">
-    <div style="margin-bottom:18px">${LOGO}</div>
-    <h1>${login ? "تسجيل الدخول" : "حساب جديد"}</h1>
-    <div class="sub">${login ? (EMP ? "أهلاً بك في صفحة الموظفين" : "أهلاً بعودتك") : (EMP ? "اعمل حسابك بالبريد وكلمة السر، وبعدها اربطه بكود شركتك." : "ابدأ بالبريد وكلمة السر، وبعدها أدخل كود إنشاء شركتك.")}</div>
-    <label class="f">البريد<input id="em" type="email" dir="ltr" autocomplete="email"></label>
-    <label class="f">كلمة السر<input id="pw" type="password" dir="ltr" autocomplete="${login ? "current-password" : "new-password"}"></label>
-    <div id="err" class="err"></div>
-    <button class="btn p full" id="go">${login ? "دخول" : "إنشاء الحساب"}</button>
-    <div class="sub" style="text-align:center;margin-top:16px">${login ? 'ليس لديك حساب؟ <button class="link" id="sw">حساب جديد</button>' : 'لديك حساب؟ <button class="link" id="sw">تسجيل الدخول</button>'}</div>
-  </div></div>`);
-  $("sw").onclick = () => authScreen(login ? "signup" : "login");
-  $("go").onclick = async () => {
-    setErr(""); const b = $("go"); b.disabled = true;
+/* One front door for everyone: log in, or start as a new company, or as an employee. */
+function authScreen(mode) {
+  mode = mode || window.MOGZY_START || (INVITE ? "company" : "login");
+  if (mode === "login") {
+    view(`<div class="wrap"><div class="center">
+      <div style="margin-bottom:18px">${LOGO}</div><h1>أهلاً بك</h1>
+      <div class="sub">سجّل دخولك بحسابك.</div>
+      <label class="f">البريد<input id="em" type="email" dir="ltr" autocomplete="email"></label>
+      <label class="f">كلمة السر<input id="pw" type="password" dir="ltr" autocomplete="current-password"></label>
+      <div id="err" class="err"></div>
+      <button class="btn p full" id="go">دخول</button>
+      <div class="sub" style="text-align:center;margin:26px 0 10px">ليس لديك حساب؟</div>
+      <div class="grid2"><button class="btn full" id="to-co">شركة جديدة</button><button class="btn full" id="to-emp">أنا موظف</button></div>
+    </div></div>`);
+    $("to-co").onclick = () => authScreen("company"); $("to-emp").onclick = () => authScreen("emp");
+    $("go").onclick = async () => {
+      setErr(""); const b = $("go"); b.disabled = true;
+      try { setSession(await raw("/auth/v1/token?grant_type=password", { method: "POST", body: { email: val("em"), password: $("pw").value } })); boot(); }
+      catch (e) { setErr(arabicErr(e)); b.disabled = false; }
+    };
+    return;
+  }
+  pathForm(mode, false);
+}
+
+/* kind: "company" | "emp"; loggedIn: the account already exists (no email/password fields) */
+function pathForm(kind, loggedIn) {
+  const co = kind === "company";
+  const acct = loggedIn ? "" : `<label class="f">البريد<input id="em" type="email" dir="ltr" autocomplete="email"></label>
+      <label class="f">كلمة السر (6 حروف على الأقل)<input id="pw" type="password" dir="ltr" autocomplete="new-password"></label>`;
+  const body = co ? `<label class="f">كود إنشاء الشركة<input id="iv" dir="ltr" placeholder="MGZ-XXXX-XXXX" value="${esc(INVITE)}"></label>
+      <div class="sub" style="margin:-4px 0 6px">تحصل عليه من Mogzy عند الاشتراك.</div>
+      <label class="f">اسم الشركة<input id="cn" placeholder="مثال: كافيه Woods"></label>
+      <label class="f">اسمك<input id="fn"></label>${acct}
+      <div class="note" style="margin:10px 0">أتعهد بأخذ موافقة مكتوبة من كل موظف قبل تسجيل وجهه.</div>
+      <label style="display:flex;gap:10px;align-items:center;margin:10px 0"><input type="checkbox" id="ag"><span>أوافق</span></label>`
+    : `<div class="sub">اطلب كود الشركة من الإدارة.</div>
+      <label class="f">كود الشركة<input id="cc" dir="ltr" placeholder="XXXX-XXXX"></label>
+      <label class="f">رقم موبايلك المسجل عند الشركة<input id="ph" type="tel" dir="ltr"></label>${acct}`;
+  view(`<div class="wrap"><div class="top">${LOGO}${loggedIn ? '<button class="btn sm" id="out">خروج</button>' : ""}</div>
+    <h1>${co ? "شركة جديدة" : "أنا موظف"}</h1>
+    <div class="card">${body}<div id="err" class="err"></div><button class="btn p full" id="mk">${co ? "إنشاء الشركة" : "ربط حسابي"}</button></div>
+    <div class="sub" style="text-align:center">${loggedIn ? '<button class="link" id="sw">رجوع</button>' : '<button class="link" id="sw">لدي حساب؟ تسجيل الدخول</button>'}</div></div>`);
+  $("sw").onclick = () => (loggedIn ? onboarding() : authScreen("login"));
+  if ($("out")) $("out").onclick = logout;
+  $("mk").onclick = async () => {
+    setErr("");
+    if (co) { if (!val("iv")) return setErr("اكتب كود إنشاء الشركة"); if (val("cn").length < 2) return setErr("اكتب اسم الشركة"); if (!$("ag").checked) return setErr("لازم توافق على التعهد"); }
+    else if (!val("cc") || !val("ph")) return setErr("اكتب كود الشركة ورقم موبايلك");
+    if (!loggedIn && (!val("em") || $("pw").value.length < 6)) return setErr("اكتب البريد وكلمة سر من 6 حروف على الأقل");
+    const b = $("mk"); b.disabled = true;
     try {
-      const body = { email: val("em"), password: $("pw").value };
-      if (login) { setSession(await raw("/auth/v1/token?grant_type=password", { method: "POST", body })); }
-      else {
-        const r = await raw("/auth/v1/signup", { method: "POST", body });
-        if (r.access_token) setSession(r); else { setErr("وصلتك رسالة تأكيد على البريد. أكّدها ثم سجّل دخولك.", true); b.disabled = false; return; }
+      if (!loggedIn) {                      // create the account (or reuse it if a previous try already made it)
+        const body = { email: val("em"), password: $("pw").value };
+        let r;
+        try { r = await raw("/auth/v1/signup", { method: "POST", body }); }
+        catch (e) { if (!/already registered/i.test(e.message || "")) throw e; r = await raw("/auth/v1/token?grant_type=password", { method: "POST", body }); }
+        if (!r.access_token) { setErr("وصلتك رسالة تأكيد على البريد. أكّدها ثم سجّل دخولك وكمّل.", true); b.disabled = false; return; }
+        setSession(r);
       }
-      boot();
+      if (co) { await rpc("create_company", { p_company_name: val("cn"), p_full_name: val("fn") || "المالك", p_invite: val("iv") }); boot(); }
+      else { const r = await rpc("claim_employee", { p_code: val("cc"), p_phone: val("ph") }); if (r === "linked") boot(); else pendingScreen(); }
     } catch (e) { setErr(arabicErr(e)); b.disabled = false; }
   };
 }
-
+/* Signed in but not attached to anything yet. */
 function onboarding() {
-  const company = `<div class="card"><h2>إنشاء شركتك</h2>
-      <label class="f">كود إنشاء الشركة<input id="iv" dir="ltr" placeholder="MGZ-XXXX-XXXX" value="${esc(INVITE)}"></label>
-      <div class="sub" style="margin:-4px 0 6px">تحصل عليه من Mogzy عند الاشتراك.</div>
-      <label class="f">اسم الشركة<input id="cn" placeholder="مثال: كافيه Woods"></label>
-      <label class="f">اسمك<input id="fn"></label>
-      <div class="note" style="margin:10px 0">أتعهد بأخذ موافقة مكتوبة من كل موظف قبل تسجيل وجهه.</div>
-      <label style="display:flex;gap:10px;align-items:center;margin:10px 0"><input type="checkbox" id="ag"><span>أوافق</span></label>
-      <button class="btn p full" id="mk">إنشاء الشركة</button></div>`;
-  const emp = `<div class="card"><h2>ربط حسابك بشركتك</h2><div class="sub">اطلب كود الشركة من الإدارة.</div>
-      <label class="f">كود الشركة<input id="cc" dir="ltr" placeholder="XXXX-XXXX"></label>
-      <label class="f">رقم موبايلك المسجل عند الشركة<input id="ph" type="tel" dir="ltr"></label>
-      <button class="btn p full" id="jn">ربط حسابي</button></div>`;
   view(`<div class="wrap"><div class="top">${LOGO}<button class="btn sm" id="out">خروج</button></div>
-    <h1>مرحباً بك</h1>${EMP ? emp : company}
-    <div class="sub" style="text-align:center;margin-top:8px">${EMP ? 'صاحب شركة؟ <a class="link" href="admin.html">صفحة الإدارة</a>' : 'موظف؟ <a class="link" href="employee.html">صفحة الموظفين</a>'}</div>
-    <div id="err" class="err"></div></div>`);
-  $("out").onclick = logout;
-  if ($("mk")) $("mk").onclick = async () => {
-    setErr(""); if (!$("ag").checked) return setErr("لازم توافق على التعهد");
-    try { if (!val("iv")) return setErr("اكتب كود إنشاء الشركة"); await rpc("create_company", { p_company_name: val("cn"), p_full_name: val("fn") || "المالك", p_invite: val("iv") }); boot(); } catch (e) { setErr(arabicErr(e)); }
-  };
-  if ($("jn")) $("jn").onclick = async () => {
-    setErr("");
-    try { const r = await rpc("claim_employee", { p_code: val("cc"), p_phone: val("ph") }); if (r === "linked") boot(); else pendingScreen(); } catch (e) { setErr(arabicErr(e)); }
-  };
-}
-function wrongPage(url, msg, btn) {
-  view(`<div class="wrap"><div class="center"><div style="margin-bottom:18px">${LOGO}</div><h1>${msg}</h1>
-    <a class="btn p full" style="margin-top:20px;text-decoration:none" href="${url}">${btn}</a>
-    <button class="btn full" style="margin-top:10px" id="out">خروج</button></div></div>`);
-  $("out").onclick = logout;
+    <h1>مرحباً بك</h1><div class="sub">اختر ما يناسبك:</div>
+    <div class="grid2" style="margin-top:14px"><button class="btn full" id="to-co">شركة جديدة</button><button class="btn full" id="to-emp">أنا موظف</button></div></div>`);
+  $("out").onclick = logout; $("to-co").onclick = () => pathForm("company", true); $("to-emp").onclick = () => pathForm("emp", true);
 }
 function pendingScreen() {
   view(`<div class="wrap"><div class="center"><div style="margin-bottom:18px">${LOGO}</div><h1>تم إرسال طلبك</h1>
@@ -183,21 +194,18 @@ function pendingScreen() {
     <button class="btn full" style="margin-top:20px" id="rf">تحديث</button><button class="btn full" style="margin-top:10px" id="out">خروج</button></div></div>`);
   $("rf").onclick = boot; $("out").onclick = logout;
 }
-function logout() { saveS(null); authScreen("login"); }
+function logout() { saveS(null); authScreen(); }
 
 /* ---------------- boot ---------------- */
 async function boot() {
-  if (!S) return authScreen("login");
+  if (!S) return authScreen();
   try {
     const me = (await db("profiles?select=*&id=eq." + S.user.id))[0];
     if (!me) {
       const lr = await db("employee_link_requests?select=status&user_id=eq." + S.user.id).catch(() => []);
-      if (lr[0] && lr[0].status === "pending") return EMP ? pendingScreen() : wrongPage("employee.html", "حسابك حساب موظف", "افتح صفحة الموظفين");
-      return onboarding();
+      return lr[0] && lr[0].status === "pending" ? pendingScreen() : onboarding();
     }
     st.me = me;
-    if (EMP && me.role !== "employee") return wrongPage("admin.html", "هذا حساب إدارة", "افتح صفحة الإدارة");
-    if (!EMP && me.role === "employee") return wrongPage("employee.html", "هذا حساب موظف", "افتح صفحة الموظفين");
     if (me.role === "employee") return loadEmployee();
     if (me.role === "platform_owner") return loadPlatform();
     return loadAdmin();
