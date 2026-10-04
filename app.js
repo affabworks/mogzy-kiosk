@@ -10,21 +10,35 @@ const LS = typeof localStorage === "undefined" ? {} : {
 
 /* ---------- pure helpers (also unit-tested) ---------- */
 function dist(a, b) { let s = 0; for (let i = 0; i < 128; i++) { const d = a[i] - b[i]; s += d * d; } return Math.sqrt(s); }
-function identify(desc, emps, minScore) {
+const MARGIN = 0.07, UNKNOWN_GAP = 0.04;
+/* Distance of one face to one employee = closest enrolled template (poses differ, so the best pose is the fair one). */
+function empDist(desc, e) { let d = 9; for (const t of e.templates || []) d = Math.min(d, dist(desc, t)); return d; }
+function bestMatch(desc, emps) {
   let best = null, bd = 9, sd = 9;
-  for (const e of emps) {
-    let d = 9; for (const t of e.templates || []) d = Math.min(d, dist(desc, t));
-    if (d < bd) { sd = bd; bd = d; best = e; } else if (d < sd) sd = d;
-  }
-  const thr = 1 - minScore;
-  return best && bd <= thr && sd - bd >= 0.04 ? { emp: best, dist: bd } : null;
+  for (const e of emps) { const d = empDist(desc, e); if (d < bd) { sd = bd; bd = d; best = e; } else if (d < sd) sd = d; }
+  return { emp: best, dist: bd, second: sd };
+}
+function identify(desc, emps, minScore) {
+  const m = bestMatch(desc, emps);
+  return m.emp && m.dist <= 1 - minScore && m.second - m.dist >= MARGIN ? { emp: m.emp, dist: m.dist } : null;
+}
+/* Several frames vote: "known" needs >=75% of them to agree on one employee, "unknown" needs >=75% clearly far from everyone. */
+function verdict(samples, emps, minScore) {
+  const thr = 1 - minScore, n = samples.length, need = Math.ceil(n * 0.75);
+  const per = samples.map((d) => bestMatch(d, emps));
+  const votes = {};
+  per.forEach((m) => { if (m.emp && m.dist <= thr && m.second - m.dist >= MARGIN) (votes[m.emp.id] = votes[m.emp.id] || []).push(m); });
+  const top = Object.values(votes).sort((x, y) => y.length - x.length)[0];
+  if (top && top.length >= need) return { kind: "known", emp: top[0].emp, dist: top.reduce((a, m) => a + m.dist, 0) / top.length };
+  if (per.filter((m) => m.dist > thr + UNKNOWN_GAP).length >= need) return { kind: "unknown" };
+  return { kind: "unsure" };
 }
 function yaw(lm) { const nose = lm[30].x, l = lm[0].x, r = lm[16].x; return (nose - l) / (r - l); }   // ~0.5 facing camera
 function ear(lm, o) { const d = (a, b) => Math.hypot(lm[a].x - lm[b].x, lm[a].y - lm[b].y);
   return (d(o + 1, o + 5) + d(o + 2, o + 4)) / (2 * d(o, o + 3)); }
 function eyeOpen(lm) { return (ear(lm, 36) + ear(lm, 42)) / 2; }
 const money = (n) => Number(n || 0).toLocaleString("en-US", { maximumFractionDigits: 0 });
-if (typeof module !== "undefined") module.exports = { dist, identify, yaw, eyeOpen };
+if (typeof module !== "undefined") module.exports = { dist, identify, bestMatch, verdict, yaw, eyeOpen };
 if (typeof window === "undefined" || !window.document) { /* node test: stop here */ }
 else (function main() {
 
@@ -94,7 +108,7 @@ const detect = (el, withDesc) => { const t = faceapi.detectAllFaces(el, opts()).
 
 /* ---------- scan loop ---------- */
 const setStatus = (t, h, cls = "") => { $("status").textContent = t; $("status").className = "status " + cls; if (h !== undefined) $("hint").textContent = h; };
-const oval = (c) => { $("oval").className = "oval " + (c || ""); };
+const oval = (c) => { $("oval").className = "oval " + (c || ""); $("oval").parentElement.classList.toggle("bad", c === "bad"); };
 function tickClock() {
   const d = now(); $("clock").textContent = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
   $("date").textContent = d.toLocaleDateString("ar-EG", { weekday: "long", day: "numeric", month: "long" });
@@ -102,31 +116,63 @@ function tickClock() {
 setInterval(tickClock, 1000);
 
 let scanTimer = null;
+const sc = { samples: [], unsure: 0, hold: 0, goneAt: 0 };
+const scReset = () => { sc.samples = []; sc.unsure = 0; };
+const idleUI = () => { oval(); setStatus("قف أمام الكاميرا", "انظر للكاميرا مباشرة وسيتعرف عليك الجهاز."); };
+let lumCv = null;
+function tooDark(v) {                            // average brightness of the camera picture
+  try { lumCv = lumCv || document.createElement("canvas"); lumCv.width = 32; lumCv.height = 24;
+    const c = lumCv.getContext("2d", { willReadFrequently: true }); c.drawImage(v, 0, 0, 32, 24);
+    const d = c.getImageData(0, 0, 32, 24).data; let t = 0; for (let i = 0; i < d.length; i += 4) t += d[i] * 0.3 + d[i + 1] * 0.59 + d[i + 2] * 0.11;
+    return t / (d.length / 4) < 38; } catch { return false; }
+}
+/* A stranger gets ONE steady red message (no flicker) that stays until they walk away. */
+function showUnknown() {
+  oval("bad"); setStatus("وجهك غير مسجّل", "اطلب من الإدارة تسجيل وجهك أولاً.", "bad");
+  sc.hold = Date.now(); sc.goneAt = 0; scReset();
+}
+const usable = (res, v) => res.length === 1 && res[0].detection.box.width >= v.videoWidth * 0.22 && (() => { const y = yaw(res[0].landmarks.positions); return y >= 0.36 && y <= 0.64; })();
+/* Collect a descriptor from the current frame; every 4th call returns a verdict. */
+async function readFace(v) {
+  const full = await detect(v, true);
+  if (full.length === 1) sc.samples.push(full[0].descriptor);
+  if (sc.samples.length < 4) return null;
+  const vd = verdict(sc.samples, cache.employees, Number(cache.settings.min_match_score)); sc.samples = [];
+  return vd;
+}
 async function scanLoop() {
   if (mode !== "scan" || busy) return;
   busy = true;
+  let next = 140;
   try {
-    const v = $("video"); const res = await detect(v, false);
+    const v = $("video"), res = await detect(v, false), t = Date.now();
     if (!cache || !cache.employees.some((e) => (e.templates || []).length)) { setStatus("لا توجد وجوه مسجلة بعد", "اطلب من المدير تسجيل الوجوه."); oval(); }
-    else if (res.length === 0) { setStatus("قف أمام الكاميرا", "انظر للكاميرا مباشرة وسيتعرف عليك الجهاز."); oval(); scanLoop.n = 0; }
-    else if (res.length > 1) { setStatus("وجه واحد فقط من فضلك", "ليقف شخص واحد أمام الجهاز."); oval(); scanLoop.n = 0; }
-    else if (res[0].detection.box.width < v.videoWidth * 0.2) { setStatus("اقترب قليلاً", ""); oval(); scanLoop.n = 0; }
-    else {
-      oval("ok"); setStatus("لحظة…", "");
-      scanLoop.n = (scanLoop.n || 0) + 1;
-      if (scanLoop.n >= 2) {
-        const full = await detect(v, true);
-        if (full.length === 1) {
-          const m = identify(full[0].descriptor, cache.employees, Number(cache.settings.min_match_score));
-          if (m) { scanLoop.n = 0; await challenge(m.emp, m.dist); busy = false; scanTimer = setTimeout(scanLoop, 220); return; }
-          scanLoop.miss = (scanLoop.miss || 0) + 1;
-          if (scanLoop.miss >= 3) setStatus("لم أتعرف عليك", "حاول مرة أخرى بإضاءة أفضل، أو اطلب من المدير تسجيل وجهك.");
+    else if (sc.hold) {                                          // red message is on screen: it stays until the person walks away
+      if (res.length === 0) { sc.goneAt = sc.goneAt || t; sc.miss = (sc.miss || 0) + 1; if (t - sc.goneAt > 2500 && sc.miss >= 4) { sc.hold = 0; sc.goneAt = 0; sc.miss = 0; scReset(); idleUI(); } }
+      else {
+        sc.goneAt = 0; sc.miss = 0;
+        if (usable(res, v)) {                                    // quiet re-check (no flicker) in case the first verdict was wrong
+          const vd = await readFace(v);
+          if (vd && vd.kind === "known") { sc.hold = 0; scReset(); await challenge(vd.emp, vd.dist); busy = false; scanTimer = setTimeout(scanLoop, 220); return; }
         }
+      }
+    }
+    else if (res.length === 0) { scReset(); if (tooDark(v)) { oval(); setStatus("الإضاءة ضعيفة", "زوّد الإضاءة أمام الجهاز.", "warn"); } else idleUI(); }
+    else if (res.length > 1) { setStatus("وجه واحد فقط من فضلك", "ليقف شخص واحد أمام الجهاز."); oval(); scReset(); }
+    else if (res[0].detection.box.width < v.videoWidth * 0.22) { setStatus("اقترب قليلاً", ""); oval(); scReset(); }
+    else if (!usable(res, v)) { setStatus("انظر للكاميرا مباشرة", ""); oval(); scReset(); }
+    else {
+      oval("ok"); if (!sc.samples.length && !sc.unsure) setStatus("جارٍ التعرف…", "");
+      const vd = await readFace(v);
+      if (vd) {
+        if (vd.kind === "known") { sc.unsure = 0; await challenge(vd.emp, vd.dist); busy = false; scanTimer = setTimeout(scanLoop, 220); return; }
+        if (vd.kind === "unknown") showUnknown();
+        else if (++sc.unsure >= 2) setStatus("لم أتأكد من هويتك", "انظر مباشرة للكاميرا وبإضاءة أفضل.", "warn");
       }
     }
   } catch (e) { console.warn(e); }
   busy = false;
-  scanTimer = setTimeout(scanLoop, 220);
+  scanTimer = setTimeout(scanLoop, next);
 }
 
 /* ---------- liveness: random head turn / blink, then re-verify the same person ---------- */
@@ -135,40 +181,49 @@ const CH = {
   turn_left:  { text: "حرّك رأسك ببطء لليسار", test: (lm) => yaw(lm) > 0.62 },
   blink:      { text: "أغمض عينيك ثم افتحهما", test: null },
 };
+const pick2 = () => { const all = ["turn_right", "turn_left", "blink"].sort(() => Math.random() - 0.5); return all.slice(0, 2); };
+/* One liveness step: wait for a neutral face first, then the asked movement. */
+async function doStep(name, ms = 8000) {
+  const t0 = Date.now(); let neutral = false, open = false, hits = 0;
+  while (Date.now() - t0 < ms) {
+    const r = await detect($("video"), false);
+    if (r.length !== 1) { await sleep(80); continue; }
+    const lm = r[0].landmarks.positions, y = yaw(lm);
+    if (name === "blink") { const e = eyeOpen(lm); if (e > 0.26) open = true; if (open && e < 0.19) return true; }
+    else { if (y > 0.44 && y < 0.56) neutral = true; if (neutral && CH[name].test(lm)) { if (++hits >= 2) return true; } else hits = 0; }
+    await sleep(60);
+  }
+  return false;
+}
+/* Same person still in front of the camera? (strict, several frames) */
+async function reverify(emp, minScore, ms = 5000) {
+  const t1 = Date.now(), got = [];
+  while (Date.now() - t1 < ms && got.length < 3) {
+    const r = await detect($("video"), true);
+    if (r.length === 1 && Math.abs(yaw(r[0].landmarks.positions) - 0.5) < 0.1) { const m = identify(r[0].descriptor, [emp], minScore); if (m) got.push(m.dist); else if (got.length === 0 && Date.now() - t1 > 3000) return null; }
+    else await sleep(80);
+  }
+  return got.length >= 2 ? got.reduce((a, b) => a + b, 0) / got.length : null;
+}
 async function challenge(emp, firstDist) {
   mode = "challenge";
-  const st = cache.settings, allowed = (st.liveness_challenges || []).filter((c) => CH[c]);
-  const required = st.liveness_required !== false;
-  let chName = null, score = 1 - firstDist;
+  const st = cache.settings, minScore = Number(st.min_match_score), required = st.liveness_required !== false;
+  let steps = [], score = 1 - firstDist;
   if (required) {
-    const pool = allowed.length ? allowed : ["turn_right", "turn_left"];
-    chName = pool[Math.floor(Math.random() * pool.length)];
-    oval("go"); setStatus(CH[chName].text, "أهلاً " + emp.full_name.split(" ")[0], "chal");
-    const t0 = Date.now(); let neutral = false, open = false, hits = 0, passed = false;
-    while (Date.now() - t0 < 9000) {
-      const r = await detect($("video"), false);
-      if (r.length !== 1) { await sleep(80); continue; }
-      const lm = r[0].landmarks.positions, y = yaw(lm); 
-      if (chName === "blink") { const e = eyeOpen(lm); if (e > 0.26) open = true; if (open && e < 0.19) { passed = true; break; } }
-      else { if (y > 0.44 && y < 0.56) neutral = true; if (neutral && CH[chName].test(lm)) { if (++hits >= 2) { passed = true; break; } } else hits = 0; }
-      await sleep(60);
+    steps = pick2();
+    for (let i = 0; i < steps.length; i++) {
+      oval("go"); setStatus(CH[steps[i]].text, `أهلاً ${emp.full_name.split(" ")[0]} · الخطوة ${i + 1} من ${steps.length}`, "chal");
+      if (!(await doStep(steps[i]))) { mode = "scan"; oval(); setStatus("لم يكتمل التحقق", "حاول من جديد ببطء.", "warn"); await sleep(1800); return resumeScan(); }
+      setStatus("انظر للكاميرا مباشرة", "", ""); oval("ok");
+      const d = await reverify(emp, minScore);
+      if (d === null) { mode = "scan"; oval(); setStatus("لم يتطابق الوجه", "حاول من جديد.", "warn"); await sleep(1800); return resumeScan(); }
+      score = Math.min(score, 1 - d);
     }
-    if (!passed) { mode = "scan"; oval(); setStatus("لم يكتمل التحقق", "حاول من جديد ببطء."); await sleep(1800); return resumeScan(); }
-    // same person must still be in front of the camera after the move
-    setStatus("انظر للكاميرا مباشرة", ""); let ok = false; const t1 = Date.now();
-    while (Date.now() - t1 < 5000 && !ok) {
-      const r = await detect($("video"), true);
-      if (r.length === 1 && Math.abs(yaw(r[0].landmarks.positions) - 0.5) < 0.09) {
-        const m = identify(r[0].descriptor, [emp], Number(st.min_match_score));
-        if (m) { ok = true; score = 1 - m.dist; }
-      } else await sleep(80);
-    }
-    if (!ok) { mode = "scan"; oval(); setStatus("لم يتطابق الوجه", "حاول من جديد."); await sleep(1800); return resumeScan(); }
   }
-  cur = { emp, score, challenge: chName };
+  cur = { emp, score, challenge: steps.join("+") || null };
   openMenu();
 }
-function resumeScan() { clearTimeout(scanTimer); mode = "scan"; oval(); setStatus("قف أمام الكاميرا", "انظر للكاميرا مباشرة وسيتعرف عليك الجهاز."); scanTimer = setTimeout(scanLoop, 0); }
+function resumeScan() { clearTimeout(scanTimer); sc.hold = 0; sc.goneAt = 0; scReset(); mode = "scan"; oval(); setStatus("قف أمام الكاميرا", "انظر للكاميرا مباشرة وسيتعرف عليك الجهاز."); scanTimer = setTimeout(scanLoop, 0); }
 
 /* ---------- menu ---------- */
 function armIdle(ms = 30000) { clearTimeout(idleTimer); idleTimer = setTimeout(goIdle, ms); }
@@ -291,23 +346,41 @@ $("ad-go").onclick = async () => {
     const emps = await rest("/rest/v1/employees?select=id,full_name&active=eq.true&order=full_name", { token: adm.token });
     const enrolled = new Set((cache?.employees || []).filter((e) => (e.templates || []).length).map((e) => e.id));
     $("ad-list").innerHTML = emps.map((e) => `<button class="emp" data-id="${e.id}"><span>${e.full_name}</span><span style="color:var(--mute);font-size:16px">${enrolled.has(e.id) ? "مسجّل ✓" : ""}</span></button>`).join("");
-    [...$("ad-list").children].forEach((b) => (b.onclick = () => { pick = b.dataset.id; shots = []; drawShots();
+    [...$("ad-list").children].forEach((b) => (b.onclick = () => { pick = b.dataset.id; shots = []; $("ad-err2").textContent = ""; drawShots();
       [...$("ad-list").children].forEach((x) => x.classList.toggle("sel", x === b)); }));
     $("ad-login").style.display = "none"; $("ad-main").style.display = "flex"; await startCam($("video2"));
   } catch (e) { $("ad-err").textContent = e.message; }
 };
+/* Enrollment: 5 guided shots, each checked for quality; the shots must be the same person and must not look like someone already enrolled. */
+const SHOTS = [
+  { n: "مواجهة", hint: "انظر للكاميرا مباشرة", ok: (y) => y > 0.44 && y < 0.56 },
+  { n: "يمين", hint: "مِل رأسك قليلاً لليمين", ok: (y) => y > 0.30 && y < 0.42 },
+  { n: "يسار", hint: "مِل رأسك قليلاً لليسار", ok: (y) => y > 0.58 && y < 0.70 },
+  { n: "مواجهة", hint: "انظر مباشرة مرة أخرى", ok: (y) => y > 0.44 && y < 0.56 },
+  { n: "ابتسامة", hint: "انظر مباشرة وابتسم", ok: (y) => y > 0.44 && y < 0.56 },
+];
+const SAME_PERSON = 0.5, TOO_CLOSE_TO_OTHER = 0.5;
 function drawShots() {
-  $("ad-shots").innerHTML = [0, 1, 2].map((i) => `<div style="flex:1;height:48px;border-radius:12px;border:1.5px solid var(--line);display:flex;align-items:center;justify-content:center;background:${shots[i] ? "#E3F0E7" : "#fff"}">${["مواجهة", "يمين", "يسار"][i]} ${shots[i] ? "✓" : ""}</div>`).join("");
-  $("ad-save").disabled = shots.length < 3;
+  $("ad-shots").innerHTML = SHOTS.map((x, i) => `<div style="flex:1;min-width:0;height:44px;border-radius:12px;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:13px;background:${shots[i] ? "#E6F1EA" : i === shots.length ? "#F2ECE3" : "#fff"}">${x.n}${shots[i] ? " ✓" : ""}</div>`).join("");
+  $("ad-save").disabled = shots.length < SHOTS.length;
+  if (pick) $("ad-hint").textContent = shots.length < SHOTS.length ? `${shots.length + 1} من ${SHOTS.length}: ${SHOTS[shots.length].hint} ثم اضغط التقاط` : "جاهز للحفظ";
 }
 $("ad-shot").onclick = async () => {
   $("ad-err2").textContent = "";
   if (!pick) { $("ad-err2").textContent = "اختر موظفاً أولاً"; return; }
-  const r = await detect($("video2"), true);
-  if (r.length !== 1) { $("ad-err2").textContent = r.length ? "وجه واحد فقط" : "لم أجد وجهاً، اقترب"; return; }
-  if (shots.length >= 3) shots = [];
-  shots.push(Array.from(r[0].descriptor)); drawShots();
-  $("ad-hint").textContent = ["الآن مِل رأسك قليلاً لليمين ثم التقط", "الآن مِل رأسك قليلاً لليسار ثم التقط", "جاهز للحفظ"][shots.length - 1];
+  if (shots.length >= SHOTS.length) shots = [];
+  const r = await detect($("video2"), true), v = $("video2"), step = SHOTS[shots.length];
+  if (r.length !== 1) { $("ad-err2").textContent = r.length ? "وجه واحد فقط أمام الكاميرا" : "لم أجد وجهاً، اقترب من الكاميرا"; return; }
+  const f = r[0], lm = f.landmarks.positions, y = yaw(lm);
+  if (f.detection.box.width < v.videoWidth * 0.28) { $("ad-err2").textContent = "اقترب أكثر من الكاميرا"; return; }
+  if (f.detection.score < 0.6) { $("ad-err2").textContent = "الصورة غير واضحة، حسّن الإضاءة وثبّت الجهاز"; return; }
+  if (eyeOpen(lm) < 0.2) { $("ad-err2").textContent = "افتح عينيك جيداً"; return; }
+  if (!step.ok(y)) { $("ad-err2").textContent = "الوضعية غير صحيحة: " + step.hint; return; }
+  const d = Array.from(f.descriptor);
+  if (shots.length && dist(d, shots[0]) > SAME_PERSON) { shots = []; drawShots(); $("ad-err2").textContent = "اللقطة لا تشبه الأولى. ابدأ من جديد وتأكد أن الموظف نفسه أمام الكاميرا."; return; }
+  const other = (cache?.employees || []).filter((e) => e.id !== pick).map((e) => ({ e, d: Math.min(9, ...(e.templates || []).map((t) => dist(d, t))) })).sort((a, b) => a.d - b.d)[0];
+  if (other && other.d < TOO_CLOSE_TO_OTHER) { shots = []; drawShots(); $("ad-err2").textContent = `هذا الوجه يشبه الموظف «${other.e.full_name}» المسجّل بالفعل. تأكد أنك اخترت الموظف الصحيح.`; return; }
+  shots.push(d); drawShots();
 };
 $("ad-save").onclick = async () => {
   $("ad-err2").textContent = "";
@@ -316,7 +389,7 @@ $("ad-save").onclick = async () => {
     await rest("/rest/v1/biometric_consents", { method: "POST", token: adm.token, body: { company_id: adm.company, employee_id: pick, policy_version: "v1" } });
     const r = await fetch(FN, { method: "POST", headers: { "content-type": "application/json", apikey: CFG.key, authorization: "Bearer " + adm.token }, body: JSON.stringify({ action: "enroll", employee_id: pick, embeddings: shots }) });
     const j = await r.json(); if (!r.ok) throw new Error(j.error || "فشل الحفظ");
-    shots = []; drawShots(); $("ad-consent").checked = false; $("ad-hint").textContent = "تم الحفظ ✓ اختر الموظف التالي.";
+    shots = []; pick = null; drawShots(); [...$("ad-list").children].forEach((x) => x.classList.remove("sel")); $("ad-consent").checked = false; $("ad-hint").textContent = "تم الحفظ ✓ اختر الموظف التالي.";
     await sync();
   } catch (e) { $("ad-err2").textContent = e.message; }
 };
