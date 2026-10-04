@@ -208,19 +208,15 @@ async function reverify(emp, minScore, ms = 5000) {
 async function challenge(emp, firstDist) {
   mode = "challenge";
   const st = cache.settings, minScore = Number(st.min_match_score), required = st.liveness_required !== false;
-  let steps = [], score = 1 - firstDist;
+  let score = 1 - firstDist;
   if (required) {
-    steps = pick2();
-    for (let i = 0; i < steps.length; i++) {
-      oval("go"); setStatus(CH[steps[i]].text, `أهلاً ${emp.full_name.split(" ")[0]} · الخطوة ${i + 1} من ${steps.length}`, "chal");
-      if (!(await doStep(steps[i]))) { mode = "scan"; oval(); setStatus("لم يكتمل التحقق", "حاول من جديد ببطء.", "warn"); await sleep(1800); return resumeScan(); }
-      setStatus("انظر للكاميرا مباشرة", "", ""); oval("ok");
-      const d = await reverify(emp, minScore);
-      if (d === null) { mode = "scan"; oval(); setStatus("لم يتطابق الوجه", "حاول من جديد.", "warn"); await sleep(1800); return resumeScan(); }
-      score = Math.min(score, 1 - d);
-    }
+    /* passive check only: no movement asked. Several strict frontal frames must all match the same person. */
+    oval("ok"); setStatus("انظر للكاميرا مباشرة", `أهلاً ${emp.full_name.split(" ")[0]}`, "");
+    const d = await reverify(emp, minScore, 4000);
+    if (d === null) { mode = "scan"; oval(); setStatus("لم يتطابق الوجه", "حاول من جديد.", "warn"); await sleep(1500); return resumeScan(); }
+    score = Math.min(score, 1 - d);
   }
-  cur = { emp, score, challenge: steps.join("+") || null };
+  cur = { emp, score, challenge: required ? "passive" : null };
   openMenu();
 }
 function resumeScan() { clearTimeout(scanTimer); sc.hold = 0; sc.goneAt = 0; scReset(); mode = "scan"; oval(); setStatus("قف أمام الكاميرا", "انظر للكاميرا مباشرة وسيتعرف عليك الجهاز."); scanTimer = setTimeout(scanLoop, 0); }
