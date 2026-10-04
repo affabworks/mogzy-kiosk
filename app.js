@@ -200,7 +200,7 @@ document.querySelectorAll("[data-back]").forEach((b) => (b.onclick = () => { ope
 let adv = "";
 function nextMonth() { const d = now(); return new Date(d.getFullYear(), d.getMonth() + 1, 1); }
 function drawAdv() {
-  $("adv-amt").innerHTML = `${adv ? money(adv) : "0"} <span style="font-size:28px">ج.م</span>`;
+  $("adv-amt").innerHTML = `${adv ? money(adv) : "0"} <span>ج.م</span>`;
   [...$("adv-chips").children].forEach((c) => c.classList.toggle("sel", c.dataset.v === adv));
 }
 $("m-advance").onclick = () => {
@@ -244,7 +244,7 @@ $("m-balance").onclick = () => {
   const b = cur.emp.balance; show("balance"); mode = "balance";
   $("bal-month").textContent = "صافي مرتبك حتى اليوم · " + now().toLocaleDateString("ar-EG", { month: "long" });
   if (!b) { $("bal-net").textContent = "—"; $("bal-rows").innerHTML = ""; $("bal-note").textContent = "لا توجد بيانات بعد. حاول بعد اتصال الجهاز بالإنترنت."; return; }
-  $("bal-net").innerHTML = `${money(b.net)} <span style="font-size:26px">ج.م</span>`;
+  $("bal-net").innerHTML = `${money(b.net)} <span>ج.م</span>`;
   const rows = [["الأجر الأساسي", b.base, ""], ["خصم التأخير والانصراف المبكر", b.late, "-"], ["خصم الغياب", b.absence, "-"],
     ["أجر الإضافي", b.overtime, "+"], ["سلفة تُخصم هذا الشهر", b.advances, "-"], ["خصومات أخرى", b.other, "-"]].filter((r) => r[0] === "الأجر الأساسي" || Number(r[1]) !== 0);
   $("bal-rows").innerHTML = rows.map((r) => `<div class="row"><span>${r[0]}</span><b>${r[2]} ${money(Math.abs(r[1]))} ج.م</b></div>`).join("");

@@ -13,47 +13,52 @@
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
 <title>Mogzy · الإدارة</title>
 <style>
-:root{--bg:#F7F4EF;--ink:#1D1A17;--mute:#6B6258;--line:#E6E0D8;--gold:#DABEA1;--goldtxt:#8A6A45;--soft:#F1EBE2;--btn:#CFC6BA;--green:#3F7A55;--red:#B5473C;--warn:#F3E7D6}
+:root{--bg:#F7F4EF;--surface:#fff;--ink:#1F1B17;--mute:#7B7167;--line:#ECE6DD;--gold:#C7A97F;--goldtxt:#8A6A45;--soft:#F2ECE3;--btn:#E0D8CD;--green:#3F7A55;--red:#B5473C;--warn:#F5ECDD;--shadow:0 1px 2px rgba(60,40,20,.04),0 10px 30px rgba(60,40,20,.05)}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html,body{margin:0;background:var(--bg);color:var(--ink);font-family:'IBM Plex Sans Arabic',system-ui,sans-serif}
-body{min-height:100vh}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:'IBM Plex Sans Arabic',system-ui,sans-serif;-webkit-text-size-adjust:100%}
+body{min-height:100vh;min-height:100dvh}
+button,input,select{font-family:inherit}
+:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 img{-webkit-touch-callout:none}
-img[src="logo.png"]{max-height:44px;width:auto;max-width:70%}
-.wrap{max-width:980px;margin:0 auto;padding:18px 18px 110px}
-.top{display:flex;align-items:center;justify-content:space-between;height:60px}
-.top img{height:38px}
-h1{font-size:30px;margin:6px 0 4px}h2{font-size:21px;margin:0 0 10px}
-.sub{color:var(--mute);font-size:16px;line-height:1.7}
-.card{background:#fff;border:1.5px solid var(--line);border-radius:22px;padding:18px 20px;margin:12px 0}
-.row{display:flex;align-items:center;gap:12px;min-height:58px;border-bottom:1px solid var(--line)}
+img[src="logo.png"]{height:30px;width:auto;max-width:60%}
+.wrap{max-width:760px;margin:0 auto;padding:max(14px,env(safe-area-inset-top)) clamp(16px,4vw,32px) 124px}
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:56px}
+.top .sub{font-size:14px}
+h1{font-size:clamp(24px,5vw,30px);font-weight:600;margin:12px 0 14px;letter-spacing:-.2px;line-height:1.3}
+h2{font-size:18px;font-weight:600;margin:0 0 10px}
+.sub{color:var(--mute);font-size:15px;line-height:1.7}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:22px;padding:18px 20px;margin:14px 0;box-shadow:var(--shadow)}
+.row{display:flex;align-items:center;gap:12px;min-height:60px;border-bottom:1px solid var(--line)}
 .row:last-child{border:none}.row .grow{flex:1;min-width:0}
-.row b{font-weight:600}.row small{color:var(--mute);font-size:14px;display:block}
-.chip{display:inline-flex;align-items:center;height:30px;padding:0 12px;border-radius:15px;font-size:14px;font-weight:500;white-space:nowrap}
-.c-green{background:#E3F0E7;color:#2F6B47}.c-amber{background:#F6E7C9;color:#7A5714}.c-gray{background:#EFE9E0;color:var(--mute)}.c-red{background:#F5DEDA;color:#8E3A31}
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:52px;padding:0 24px;border-radius:15px;border:1.5px solid var(--btn);background:#fff;color:var(--ink);font:600 17px 'IBM Plex Sans Arabic',sans-serif;cursor:pointer}
-.btn.p{background:var(--ink);color:var(--bg);border:none}.btn.sm{height:40px;padding:0 16px;font-size:15px;border-radius:12px}.btn.full{width:100%}
+.row b{font-weight:600}.row small{color:var(--mute);font-size:14px;display:block;line-height:1.6}
+.chip{display:inline-flex;align-items:center;height:28px;padding:0 12px;border-radius:14px;font-size:13px;font-weight:500;white-space:nowrap}
+.c-green{background:#E6F1EA;color:#2F6B47}.c-amber{background:#F6EAD0;color:#7A5714}.c-gray{background:#F0EBE3;color:var(--mute)}.c-red{background:#F6E1DD;color:#8E3A31}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:50px;padding:0 24px;border-radius:14px;border:1px solid var(--btn);background:var(--surface);color:var(--ink);font-size:16px;font-weight:600;cursor:pointer;transition:transform .12s}
+.btn:active{transform:scale(.98)}
+.btn.p{background:var(--ink);color:var(--bg);border-color:var(--ink)}.btn.sm{height:38px;padding:0 16px;font-size:14px;border-radius:12px}.btn.full{width:100%}
 .btn[disabled]{opacity:.5}
-label.f{display:flex;flex-direction:column;gap:7px;font-size:15px;color:var(--mute);font-weight:500;margin:10px 0}
-input,select{height:52px;border-radius:14px;border:1.5px solid var(--btn);background:#fff;color:var(--ink);font:500 18px 'IBM Plex Sans Arabic',sans-serif;padding:0 14px;width:100%}
-input[type=checkbox]{width:24px;height:24px;accent-color:var(--ink);padding:0}
-.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
-.stat{background:#fff;border:1.5px solid var(--line);border-radius:18px;padding:14px 16px}.stat span{color:var(--mute);font-size:14px}.stat div{font-size:30px;font-weight:700;margin-top:2px}
-.tabs{position:fixed;bottom:0;left:0;right:0;display:flex;background:#fff;border-top:1px solid var(--line);padding:6px 6px calc(6px + env(safe-area-inset-bottom));z-index:5}
-.tabs button{flex:1;border:none;background:none;height:54px;font:500 14px 'IBM Plex Sans Arabic',sans-serif;color:var(--mute);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer;position:relative}
-.tabs button.on{color:var(--ink);font-weight:700}
-.tabs svg{width:24px;height:24px}
-.badge{position:absolute;top:2px;right:calc(50% - 22px);min-width:18px;height:18px;border-radius:9px;background:var(--red);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;padding:0 5px}
-.err{color:var(--red);font-size:15px;min-height:22px;margin:6px 0}
+label.f{display:flex;flex-direction:column;gap:7px;font-size:14px;color:var(--mute);font-weight:500;margin:12px 0}
+input,select{height:50px;border-radius:13px;border:1px solid var(--btn);background:var(--surface);color:var(--ink);font-size:17px;font-weight:500;padding:0 14px;width:100%}
+input[type=checkbox]{width:22px;height:22px;accent-color:var(--ink);padding:0;flex-shrink:0}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:14px 16px;box-shadow:var(--shadow)}.stat span{color:var(--mute);font-size:13px}.stat div{font-size:28px;font-weight:600;margin-top:2px}
+.tabs{position:fixed;left:50%;transform:translateX(-50%);bottom:max(12px,env(safe-area-inset-bottom));width:min(calc(100% - 24px),520px);display:flex;background:var(--surface);border:1px solid var(--line);border-radius:24px;padding:6px;z-index:5;box-shadow:0 12px 32px rgba(60,40,20,.12)}
+.tabs button{flex:1;border:none;background:none;height:54px;border-radius:18px;font-size:12px;font-weight:500;color:var(--mute);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;cursor:pointer;position:relative}
+.tabs button.on{color:var(--ink);font-weight:600;background:var(--soft)}
+.tabs svg{width:22px;height:22px}
+.badge{position:absolute;top:3px;right:calc(50% - 20px);min-width:17px;height:17px;border-radius:9px;background:var(--red);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;padding:0 5px}
+.err{color:var(--red);font-size:14px;min-height:22px;margin:6px 0}
 .ok{color:var(--green)}
 .note{background:var(--warn);border-radius:14px;padding:12px 14px;font-size:14px;line-height:1.7;color:#4A3E30}
-.net{background:var(--ink);color:var(--bg);border-radius:24px;padding:22px 24px}.net small{color:var(--gold)}.net div{font-size:48px;font-weight:700;direction:ltr;text-align:right}
-.code{font-size:34px;font-weight:700;letter-spacing:3px;direction:ltr;text-align:right}
-table{width:100%;border-collapse:collapse;font-size:15px}th,td{padding:10px 6px;border-bottom:1px solid var(--line);text-align:right}th{color:var(--mute);font-weight:500}td.n{direction:ltr;text-align:left}
-.center{display:flex;flex-direction:column;justify-content:center;min-height:80vh;max-width:440px;margin:0 auto}
-.link{color:var(--goldtxt);font-weight:600;cursor:pointer;background:none;border:none;font:inherit;padding:0}
+.net{background:var(--ink);color:var(--bg);border-radius:22px;padding:22px 24px}.net small{color:var(--gold)}.net div{font-size:clamp(38px,9vw,48px);font-weight:600;direction:ltr;text-align:right}
+.code{font-size:28px;font-weight:600;letter-spacing:2px;direction:ltr;text-align:right}
+table{width:100%;border-collapse:collapse;font-size:14px}th,td{padding:12px 6px;border-bottom:1px solid var(--line);text-align:right}th{color:var(--mute);font-weight:500}td.n{direction:ltr;text-align:left}
+.center{display:flex;flex-direction:column;justify-content:center;min-height:82vh;min-height:82dvh;max-width:420px;margin:0 auto}
+.link{color:var(--goldtxt);font-weight:600;cursor:pointer;background:none;border:none;font:inherit;padding:0;text-decoration:none}
 .hide{display:none!important}
-@media(max-width:640px){.stats{grid-template-columns:1fr 1fr 1fr}.stat div{font-size:24px}.grid2{grid-template-columns:1fr}th:nth-child(n+5),td:nth-child(n+5){display:none}}
+@media(max-width:640px){.stat div{font-size:24px}.grid2{grid-template-columns:1fr}th:nth-child(n+3):nth-child(-n+5),td:nth-child(n+3):nth-child(-n+5){display:none}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
 <body>
@@ -293,6 +298,10 @@ function tabSet() {
   $("body").innerHTML = `<h1>الإعدادات</h1>
    <div class="card"><div class="sub">كود شركتك (يعطيه الموظف عند ربط موبايله)</div><div class="code">${esc(st.co.code)}</div>
      <div class="sub" style="margin-top:12px">ابعت للموظف رابط صفحته مع الكود:</div><button class="btn sm" id="cpl" style="margin-top:6px">نسخ رابط الموظفين</button></div>
+   <div class="card"><h2>جهاز الباب (الكشك)</h2>
+     <div class="sub">افتح الرابط على التابلت اللي عند الباب، وسجّل دخولك بحساب الإدارة مرة واحدة لربطه بشركتك، وبعدها يشتغل بالوش فقط.</div>
+     <div class="code" style="font-size:15px;letter-spacing:0;word-break:break-all;margin:10px 0">${esc(new URL("./", location.href).href)}</div>
+     <button class="btn sm" id="cpk">نسخ رابط الكشك</button></div>
    <div class="card"><h2>تطبيق الموظف على موبايله</h2><div class="sub" style="margin-bottom:6px">اختياري. الحضور يبقى من الجهاز فقط.</div>
      ${tg("employee_app_enabled", "السماح للموظفين بالدخول من موبايلهم")}${tg("employee_auto_link", "ربط تلقائي إذا تطابق رقم الموبايل", "بدون موافقتك")}${tg("employee_see_salary", "يشوف الموظف مرتبه")}${tg("employee_can_request_advance", "يطلب سلفة")}${tg("employee_can_request_leave", "يطلب إجازة")}</div>
    <div class="card"><h2>الضرائب والتأمينات</h2><div class="sub" style="margin-bottom:6px">مقفولة افتراضياً ولا يُخصم منها شيء.</div>${tg("apply_income_tax", "خصم ضريبة المرتبات")}${tg("apply_insurance", "خصم التأمينات الاجتماعية")}</div>
@@ -301,6 +310,7 @@ function tabSet() {
    <div id="err" class="err"></div><button class="btn p full" id="sv">حفظ</button>
    <div style="height:14px"></div><button class="btn full" id="out">تسجيل الخروج</button>`;
   $("out").onclick = logout;
+  $("cpk").onclick = async () => { const ok = await copyText(new URL("./", location.href).href); if (ok) $("cpk").textContent = "تم النسخ ✓"; };
   $("cpl").onclick = async () => { const ok = await copyText(new URL("employee.html", location.href).href); if (ok) $("cpl").textContent = "تم النسخ ✓"; };
   $("sv").onclick = async () => {
     setErr(""); const body = {};
@@ -332,7 +342,7 @@ function renderEmployee(pay, adv, lv, ses) {
    ${pay ? `<div class="net"><small>صافي مرتبك حتى اليوم</small><div>${money(pay.net_pay)} <span style="font-size:20px">ج.م</span></div></div>
    <div class="card">${row("الأجر الأساسي", money(pay.base_pay) + " ج.م")}${row("خصم التأخير", "- " + money(Number(pay.late_deduction) + Number(pay.early_leave_deduction)) + " ج.م", "color:var(--red)")}${row("الإضافي", "+ " + money(Number(pay.overtime_pay) + Number(pay.rest_day_pay)) + " ج.م", "color:var(--green)")}${row("سلفة تُخصم", "- " + money(pay.advances_deducted) + " ج.م", "color:var(--red)")}</div>` : ""}
    <div class="grid2">${m.can_request_advance ? `<div class="card"><h2>طلب سلفة</h2><label class="f">المبلغ<input id="aa" type="number" inputmode="numeric"></label><button class="btn p full" id="as">إرسال</button></div>` : ""}
-   ${m.can_request_leave ? `<div class="card"><h2>طلب إجازة</h2><div class="grid2"><label class="f">من<input id="lf" type="date"></label><label class="f">إلى<input id="lt" type="date"></label></div><button class="btn p full" id="ls">إرسال</button></div>` : ""}</div>
+   ${m.can_request_leave ? `<div class="card"><h2>طلب إجازة</h2><label class="f">من<input id="lf" type="date"></label><label class="f">إلى<input id="lt" type="date"></label><button class="btn p full" id="ls">إرسال</button></div>` : ""}</div>
    <div id="err" class="err"></div>
    <div class="card"><h2>طلباتي</h2>${[...adv.map((a) => `<div class="row"><div class="grow"><b>سلفة ${money(a.amount)} ج.م</b></div>${stChip(a.status)}</div>`), ...lv.map((l) => `<div class="row"><div class="grow"><b>إجازة ${l.from_date} → ${l.to_date}</b></div>${stChip(l.status)}</div>`)].join("") || '<div class="sub">لا توجد طلبات.</div>'}</div>
    <div class="card"><h2>حضوري</h2>${ses.map((s) => `<div class="row"><div class="grow"><b>${new Date(s.check_in).toLocaleDateString("ar-EG", { weekday: "long", day: "numeric", month: "short" })}</b></div><span class="sub">${hhmm(s.check_in)}${s.check_out ? " → " + hhmm(s.check_out) : " (داخل)"}</span></div>`).join("") || '<div class="sub">لا يوجد حضور مسجّل.</div>'}</div>

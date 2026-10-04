@@ -13,113 +13,112 @@
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
 <title>Mogzy</title>
 <style>
-:root{--bg:#F7F4EF;--ink:#1D1A17;--mute:#6B6258;--line:#E6E0D8;--gold:#DABEA1;--goldtxt:#8A6A45;--soft:#F1EBE2;--btn:#CFC6BA;--green:#3F7A55;--red:#B5473C;--warn:#F3E7D6}
+:root{--bg:#F7F4EF;--surface:#fff;--ink:#1F1B17;--mute:#7B7167;--line:#ECE6DD;--gold:#C7A97F;--goldtxt:#8A6A45;--soft:#F2ECE3;--btn:#E0D8CD;--green:#3F7A55;--red:#B5473C;--warn:#F5ECDD;--shadow:0 1px 2px rgba(60,40,20,.04),0 10px 30px rgba(60,40,20,.05)}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:'IBM Plex Sans Arabic',system-ui,sans-serif;overflow:hidden;user-select:none}
-.screen{position:absolute;inset:0;display:none;flex-direction:column;padding:28px 44px}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:'IBM Plex Sans Arabic',system-ui,sans-serif;overflow:hidden;user-select:none;-webkit-text-size-adjust:100%}
+button,input,select{font-family:inherit}
+:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.screen{position:absolute;inset:0;display:none;flex-direction:column;gap:20px;overflow-y:auto;overflow-x:hidden;padding:max(20px,env(safe-area-inset-top)) clamp(20px,5vw,64px) max(24px,env(safe-area-inset-bottom))}
 .screen.on{display:flex}
-.top{display:flex;align-items:center;justify-content:space-between;height:64px;flex-shrink:0}
-.logo{height:44px;cursor:pointer}
-.badge{display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 14px;border-radius:18px;background:#fff;border:1.5px solid var(--line);font-size:15px;color:var(--mute)}
-.dot{width:10px;height:10px;border-radius:50%;background:var(--green)}.dot.off{background:#C9962B}
-h1{font-size:40px;margin:0;font-weight:700}
-.sub{font-size:20px;color:var(--mute);margin-top:6px}
-.btn{display:flex;align-items:center;justify-content:center;gap:12px;height:76px;border-radius:20px;border:1.5px solid var(--btn);background:#fff;color:var(--ink);font:600 24px 'IBM Plex Sans Arabic',sans-serif;cursor:pointer;padding:0 28px}
-.btn.primary{background:var(--ink);color:var(--bg);border:none}
-.btn.small{height:56px;font-size:18px;border-radius:14px}
+.screen>*{flex-shrink:0}
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:48px}
+.logo{height:32px;width:auto;cursor:pointer}
+.badge{display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 14px;border-radius:16px;background:var(--surface);border:1px solid var(--line);font-size:14px;color:var(--mute)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--green)}.dot.off{background:#C9962B}
+h1{font-size:clamp(24px,4vw,32px);margin:0;font-weight:600;letter-spacing:-.2px}
+.sub{font-size:17px;color:var(--mute);line-height:1.6}
+.hint{font-size:16px;color:var(--mute);line-height:1.7}
+.btn{display:flex;align-items:center;justify-content:center;gap:10px;height:56px;border-radius:16px;border:1px solid var(--btn);background:var(--surface);color:var(--ink);font-size:18px;font-weight:600;cursor:pointer;padding:0 28px;transition:transform .12s}
+.btn.primary{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.btn.small{height:44px;font-size:16px;border-radius:13px;padding:0 20px}
 .btn[disabled]{opacity:.4}
 .btn:active{transform:scale(.98)}
 /* scan */
-.scanwrap{flex:1;display:flex;align-items:center;justify-content:center;gap:56px;min-height:0}
-.cam{position:relative;width:520px;height:480px;border-radius:32px;overflow:hidden;background:#222;border:3px solid #fff;box-shadow:0 8px 40px rgba(60,40,20,.15);flex-shrink:0}
+.scanwrap{flex:1 0 auto;display:flex;align-items:center;justify-content:center;gap:clamp(32px,6vw,72px)}
+.cam{position:relative;width:min(100%,560px);aspect-ratio:4/3;max-height:64vh;border-radius:28px;overflow:hidden;background:#2A2622;box-shadow:var(--shadow);flex-shrink:0}
 .cam video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
-.oval{position:absolute;left:50%;top:50%;width:300px;height:380px;transform:translate(-50%,-50%);border:4px dashed rgba(255,255,255,.75);border-radius:50%;transition:.2s}
-.oval.ok{border-color:#9FD8B0;border-style:solid}
+.oval{position:absolute;left:50%;top:50%;width:52%;height:84%;transform:translate(-50%,-50%);border:2px dashed rgba(255,255,255,.7);border-radius:50%;transition:border-color .2s}
+.oval.ok{border-color:#A7D9B7;border-style:solid}
 .oval.go{border-color:var(--gold);border-style:solid}
-.msg{display:flex;flex-direction:column;gap:14px;max-width:460px}
-.clock{font-size:96px;font-weight:700;line-height:1;direction:ltr;text-align:right}
-.date{font-size:24px;color:var(--mute)}
-.status{font-size:34px;font-weight:700;line-height:1.4}
-.hint{font-size:20px;color:var(--mute);line-height:1.6}
-.status.chal{color:var(--goldtxt);font-size:44px}
+.msg{display:flex;flex-direction:column;gap:10px;max-width:420px}
+.clock{font-size:clamp(56px,8vw,84px);font-weight:500;line-height:1;direction:ltr;text-align:right;letter-spacing:-1px}
+.date{font-size:18px;color:var(--mute)}
+.status{font-size:clamp(22px,3vw,28px);font-weight:600;line-height:1.4;margin-top:14px}
+.status.chal{color:var(--goldtxt);font-size:clamp(26px,4vw,36px)}
 /* menu */
-.hello{font-size:44px;font-weight:700}
-.grid{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:20px;padding-top:22px;min-height:0}
-.tile{display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:6px;padding:0 36px;border-radius:28px;border:1.5px solid var(--line);background:#fff;cursor:pointer;font-family:inherit;text-align:right;color:var(--ink)}
-.tile b{font-size:34px}.tile span{font-size:19px;color:var(--mute)}
-.tile.primary{background:var(--ink);color:var(--bg);border:none}.tile.primary span{color:var(--gold)}
+.hello{font-size:clamp(24px,4vw,32px);font-weight:600}
+.grid{flex:0 0 auto;margin:auto;width:100%;max-width:920px;display:grid;grid-template-columns:1fr 1fr;grid-auto-rows:minmax(112px,168px);gap:16px}
+.tile{display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:6px;padding:0 clamp(22px,3vw,36px);border-radius:24px;border:1px solid var(--line);background:var(--surface);box-shadow:var(--shadow);cursor:pointer;text-align:right;color:var(--ink)}
+.tile b{font-size:clamp(22px,3vw,28px);font-weight:600}.tile span{font-size:15px;color:var(--mute)}
+.tile.primary{background:var(--ink);color:var(--bg);border-color:var(--ink)}.tile.primary span{color:var(--gold)}
 .tile[disabled]{opacity:.45}
+.tile:active{transform:scale(.99)}
 /* forms */
-.panel{background:#fff;border:1.5px solid var(--line);border-radius:28px;padding:28px 32px}
-.chips{display:flex;gap:14px;flex-wrap:wrap}
-.chip{height:72px;min-width:150px;padding:0 24px;border-radius:18px;border:1.5px solid var(--btn);background:#fff;font:600 28px 'IBM Plex Sans Arabic',sans-serif;cursor:pointer;color:var(--ink)}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:24px;padding:clamp(20px,3vw,32px);box-shadow:var(--shadow)}
+.split{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:clamp(24px,4vw,48px);align-items:start}
+.stack{display:flex;flex-direction:column;gap:18px;min-width:0}
+.cols{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.chips{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.chip{height:56px;padding:0 8px;border-radius:14px;border:1px solid var(--btn);background:var(--surface);font-size:20px;font-weight:600;cursor:pointer;color:var(--ink)}
 .chip.sel{background:var(--ink);color:var(--bg);border-color:var(--ink)}
-.bigamt{font-size:72px;font-weight:700;direction:ltr;text-align:right}
-.keys{direction:ltr;display:grid;grid-template-columns:repeat(3,92px);gap:10px}
-.key{height:72px;border-radius:16px;border:1.5px solid var(--line);background:#fff;font:600 30px 'IBM Plex Sans Arabic',sans-serif;cursor:pointer}
-label.f{display:flex;flex-direction:column;gap:8px;font-size:18px;color:var(--mute);font-weight:500}
-input.t,select.t{height:64px;border-radius:16px;border:1.5px solid var(--btn);background:#fff;font:500 24px 'IBM Plex Sans Arabic',sans-serif;padding:0 18px;color:var(--ink);width:100%}
-.row{display:flex;justify-content:space-between;align-items:center;height:60px;border-bottom:1px solid var(--line);font-size:24px}
+.bigamt{font-size:clamp(44px,7vw,64px);font-weight:600;direction:ltr;text-align:right;line-height:1.1}
+.bigamt span{font-size:.4em;font-weight:500;color:var(--mute)}
+.keys{direction:ltr;display:grid;grid-template-columns:repeat(3,84px);gap:10px}
+.key{height:60px;border-radius:14px;border:1px solid var(--line);background:var(--surface);font-size:24px;font-weight:600;color:var(--ink);cursor:pointer}
+.key:active{background:var(--soft)}
+label.f{display:flex;flex-direction:column;gap:8px;font-size:15px;color:var(--mute);font-weight:500}
+input.t,select.t{height:56px;border-radius:14px;border:1px solid var(--btn);background:var(--surface);font-size:18px;font-weight:500;padding:0 16px;color:var(--ink);width:100%}
+.row{display:flex;justify-content:space-between;align-items:center;min-height:56px;border-bottom:1px solid var(--line);font-size:18px}
 .row:last-child{border:none}.row span:first-child{color:var(--mute)}.row b{font-weight:600}
-.net{background:var(--ink);color:var(--bg);border-radius:28px;padding:28px 36px}
-.net small{color:var(--gold);font-size:20px}.net div{font-size:76px;font-weight:700;direction:ltr;text-align:right}
-.note{padding:14px 18px;border-radius:16px;background:var(--warn);font-size:18px;line-height:1.6;color:#4A3E30}
-.done{align-items:center;justify-content:center;text-align:center;gap:18px}
-.tick{width:150px;height:150px;border-radius:50%;background:var(--ink);display:flex;align-items:center;justify-content:center}
-.err{color:var(--red);font-size:18px;min-height:26px}
-.list{display:flex;flex-direction:column;gap:8px;overflow:auto;max-height:420px}
-.emp{display:flex;justify-content:space-between;align-items:center;padding:0 18px;height:60px;border-radius:14px;border:1.5px solid var(--line);background:#fff;font:500 22px 'IBM Plex Sans Arabic',sans-serif;cursor:pointer}
+.net{background:var(--ink);color:var(--bg);border-radius:24px;padding:24px 28px}
+.net small{color:var(--gold);font-size:15px}.net div{font-size:clamp(44px,7vw,60px);font-weight:600;direction:ltr;text-align:right;line-height:1.15}
+.net div span{font-size:.4em;font-weight:500;color:var(--gold)}
+.note{padding:14px 18px;border-radius:16px;background:var(--warn);font-size:15px;line-height:1.7;color:#4A3E30}
+.done{align-items:center;justify-content:center;text-align:center;gap:16px}
+.tick{width:104px;height:104px;border-radius:50%;background:var(--ink);display:flex;align-items:center;justify-content:center}
+.err{color:var(--red);font-size:15px;min-height:22px}
+.list{display:flex;flex-direction:column;gap:8px;overflow:auto;max-height:min(420px,48vh)}
+.emp{display:flex;justify-content:space-between;align-items:center;padding:0 16px;height:56px;border-radius:14px;border:1px solid var(--line);background:var(--surface);font-size:18px;font-weight:500;cursor:pointer;color:var(--ink)}
 .emp.sel{border-color:var(--ink);background:var(--soft)}
+.enroll{display:flex;gap:28px;flex:1 0 auto}
+.enroll>div{display:flex;flex-direction:column;gap:12px}
+.enroll .side{width:min(100%,380px)}.enroll .main{flex:1;min-width:0}
+.enroll .cam{width:min(100%,440px)}
+.sticky{position:sticky;bottom:12px;box-shadow:0 -14px 14px 4px var(--bg)}
+.narrow{max-width:520px;width:100%;margin:0 auto;display:flex;flex-direction:column;gap:16px}
 img{-webkit-touch-callout:none;-webkit-user-drag:none}
-@media (max-width:900px),(orientation:portrait){
- .screen{padding:16px 18px}
- h1{font-size:30px}
- .scanwrap{flex-direction:column;gap:18px;justify-content:center}
- .cam{width:100%;max-width:520px;height:min(62vw,420px);min-height:280px}
- .oval{width:46%;height:82%}
+@media (max-width:860px),(orientation:portrait){
+ .screen{gap:16px}
+ .scanwrap{flex-direction:column;gap:20px;justify-content:center}
+ .cam{width:100%;max-width:520px}
  .msg{align-items:center;text-align:center;max-width:100%}
- .clock{font-size:60px;text-align:center}
- .status{font-size:26px}.status.chal{font-size:32px}
- .grid{grid-template-columns:1fr}
- .tile{padding:0 24px}.tile b{font-size:28px}
- .hello{font-size:30px}
- .panel{padding:18px}
- .panel[style*="display:flex"]{flex-wrap:wrap}
- .keys{grid-template-columns:repeat(3,80px)}
- .bigamt{font-size:52px}
- #s-admin>#ad-main{flex-direction:column}
- #s-admin #ad-main>div{width:100% !important}
- .net div{font-size:52px}
+ .clock{text-align:center}
+ .grid{gap:12px}
+ .split{grid-template-columns:minmax(0,1fr)}
+ .keys{grid-template-columns:repeat(3,1fr);width:100%;max-width:340px;margin:0 auto;gap:8px}
+ .key{height:56px}
+ .cols{grid-template-columns:1fr}
+ .enroll{flex-direction:column}.enroll .side{width:100%}
+ .panel{padding:20px}
 }
-
-/* --- phone/tablet fit: screens scroll, action buttons stay visible --- */
-.screen{overflow-y:auto;overflow-x:hidden;height:100vh;height:100dvh;bottom:auto}
-#adv-go,#lv-go{position:sticky;bottom:10px;flex-shrink:0;box-shadow:0 -10px 14px 6px var(--bg)}
-.key{color:var(--ink)}
-#adv-keys{margin:0 auto}
-@media (max-width:900px),(orientation:portrait){
- #s-advance .panel{flex-direction:column;gap:14px !important;align-items:stretch !important}
- #s-advance .chip{height:54px;min-width:0;flex:1 1 40%;font-size:22px}
- #s-advance .bigamt{font-size:44px}
- .keys{grid-template-columns:repeat(3,1fr);width:100%;max-width:360px;gap:8px}
- .key{height:56px;font-size:26px}
- #s-leave .panel>div:first-child{flex-direction:column}
- .btn{height:64px;font-size:22px}
+@media (max-height:640px) and (orientation:landscape){
+ .screen{gap:12px;padding-top:14px}
+ .cam{max-height:58vh}.key{height:48px}.chip{height:48px}.btn{height:50px}.grid{grid-auto-rows:minmax(84px,130px)}.clock{font-size:56px}
 }
-@media (max-height:620px) and (orientation:landscape){
- .key{height:52px}.keys{grid-template-columns:repeat(3,76px)}.chip{height:56px}.bigamt{font-size:52px}
-}
+@media (max-width:560px){.grid{grid-template-columns:1fr;grid-auto-rows:minmax(92px,124px)}}
+#s-advance>*,#s-leave>*,#s-balance>*{width:100%;max-width:760px;margin-inline:auto}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 </head>
 <body>
 
 <!-- 0. loading -->
-<div id="s-load" class="screen on done"><img src="logo.png" style="height:70px"><div class="sub" id="loadmsg">جاري التحضير…</div></div>
+<div id="s-load" class="screen on done"><img class="logo" src="logo.png" style="height:44px"><div class="sub" id="loadmsg">جاري التحضير…</div></div>
 
 <!-- 1. pair this device -->
 <div id="s-setup" class="screen">
   <div class="top"><img class="logo" src="logo.png"></div>
-  <div style="max-width:560px;margin:10px auto 0;display:flex;flex-direction:column;gap:16px;width:100%">
+  <div class="narrow">
     <div><h1>ربط هذا الجهاز بشركتك</h1><div class="sub">سجّل دخول مدير الشركة مرة واحدة فقط.</div></div>
     <label class="f">البريد<input class="t" id="su-email" type="email" dir="ltr"></label>
     <label class="f">كلمة السر<input class="t" id="su-pass" type="password" dir="ltr"></label>
@@ -156,40 +155,40 @@ img{-webkit-touch-callout:none;-webkit-user-drag:none}
 <!-- 4. advance -->
 <div id="s-advance" class="screen">
   <div class="top"><h1>طلب سلفة</h1><button class="btn small" data-back>رجوع</button></div>
-  <div class="panel" style="display:flex;gap:40px;margin-top:18px;align-items:flex-start">
-    <div style="flex:1;display:flex;flex-direction:column;gap:20px">
+  <div class="panel split">
+    <div class="stack">
       <div class="sub">اختر المبلغ أو اكتبه</div>
       <div class="chips" id="adv-chips"></div>
-      <div class="bigamt" id="adv-amt">0 <span style="font-size:28px">ج.م</span></div>
+      <div class="bigamt" id="adv-amt">0 <span>ج.م</span></div>
       <div class="hint" id="adv-when"></div>
     </div>
     <div class="keys" id="adv-keys"></div>
   </div>
   <div class="err" id="adv-err"></div>
-  <button class="btn primary" id="adv-go" style="margin-top:8px">إرسال الطلب</button>
+  <button class="btn primary sticky" id="adv-go">إرسال الطلب</button>
 </div>
 
 <!-- 5. leave -->
 <div id="s-leave" class="screen">
   <div class="top"><h1>طلب إجازة</h1><button class="btn small" data-back>رجوع</button></div>
-  <div class="panel" style="display:flex;flex-direction:column;gap:20px;margin-top:18px">
-    <div style="display:flex;gap:20px">
-      <label class="f" style="flex:1">من يوم<input class="t" type="date" id="lv-from"></label>
-      <label class="f" style="flex:1">إلى يوم<input class="t" type="date" id="lv-to"></label>
-      <label class="f" style="flex:1">النوع<select class="t" id="lv-kind"><option value="annual">سنوية</option><option value="sick">مرضية</option><option value="unpaid">بدون أجر</option></select></label>
+  <div class="panel stack">
+    <div class="cols">
+      <label class="f">من يوم<input class="t" type="date" id="lv-from"></label>
+      <label class="f">إلى يوم<input class="t" type="date" id="lv-to"></label>
+      <label class="f">النوع<select class="t" id="lv-kind"><option value="annual">سنوية</option><option value="sick">مرضية</option><option value="unpaid">بدون أجر</option></select></label>
     </div>
     <div class="hint" id="lv-days"></div>
   </div>
   <div class="err" id="lv-err"></div>
-  <button class="btn primary" id="lv-go" style="margin-top:8px">إرسال الطلب</button>
+  <button class="btn primary sticky" id="lv-go">إرسال الطلب</button>
 </div>
 
 <!-- 6. balance -->
 <div id="s-balance" class="screen">
   <div class="top"><h1>رصيدي</h1><button class="btn small" data-back>رجوع</button></div>
-  <div class="net" style="margin-top:18px"><small id="bal-month"></small><div id="bal-net">0</div></div>
-  <div class="panel" style="margin-top:16px;padding:8px 28px" id="bal-rows"></div>
-  <div class="note" style="margin-top:14px" id="bal-note"></div>
+  <div class="net"><small id="bal-month"></small><div id="bal-net">0</div></div>
+  <div class="panel" style="padding:8px 28px" id="bal-rows"></div>
+  <div class="note" id="bal-note"></div>
 </div>
 
 <!-- 7. result -->
@@ -201,15 +200,15 @@ img{-webkit-touch-callout:none;-webkit-user-drag:none}
 <!-- 8. admin: enroll faces -->
 <div id="s-admin" class="screen">
   <div class="top"><h1>تسجيل وجوه الموظفين</h1><button class="btn small" id="ad-exit">إنهاء</button></div>
-  <div id="ad-login" style="max-width:560px;display:flex;flex-direction:column;gap:14px;margin-top:10px">
+  <div id="ad-login" class="narrow">
     <label class="f">البريد<input class="t" id="ad-email" type="email" dir="ltr"></label>
     <label class="f">كلمة السر<input class="t" id="ad-pass" type="password" dir="ltr"></label>
     <div class="err" id="ad-err"></div><button class="btn primary" id="ad-go">دخول المدير</button>
   </div>
-  <div id="ad-main" style="display:none;flex:1;gap:28px;margin-top:10px;min-height:0">
-    <div style="width:420px;display:flex;flex-direction:column;gap:10px;min-height:0"><div class="sub">اختر الموظف</div><div class="list" id="ad-list"></div></div>
-    <div style="flex:1;display:flex;flex-direction:column;gap:12px">
-      <div class="cam" style="width:420px;height:320px"><video id="video2" autoplay playsinline muted></video><div class="oval" style="width:200px;height:260px"></div></div>
+  <div id="ad-main" class="enroll" style="display:none">
+    <div class="side"><div class="sub">اختر الموظف</div><div class="list" id="ad-list"></div></div>
+    <div class="main">
+      <div class="cam"><video id="video2" autoplay playsinline muted></video><div class="oval"></div></div>
       <label style="display:flex;gap:12px;align-items:flex-start;font-size:18px;line-height:1.6"><input type="checkbox" id="ad-consent" style="width:26px;height:26px;margin-top:3px"><span>الموظف وقّع على موافقة مكتوبة لتسجيل وجهه، وهي محفوظة عندي.</span></label>
       <div style="display:flex;gap:10px" id="ad-shots"></div>
       <div class="hint" id="ad-hint">اختر موظفاً، ثم التقط 3 صور: مواجهة، ثم يميل قليلاً لكل جهة.</div>
