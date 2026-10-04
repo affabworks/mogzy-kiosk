@@ -73,6 +73,7 @@ const ICON = {
   cog: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h10M18 7h2M4 17h2M10 17h10M14 4v6M6 14v6"/></svg>',
   clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
 };
+const INVITE = (new URLSearchParams(location.search).get("code") || "").toUpperCase();
 const LOGO = '<img src="logo.png" alt="Mogzy">';
 
 /* ---------------- REST helpers (the user's own login token; RLS does the protecting) ---------------- */
@@ -100,6 +101,8 @@ const arabicErr = (e) => {
   if (/no match/i.test(m)) return "الكود أو رقم الموبايل غير مطابق، أو الشركة لم تفعّل دخول الموظفين";
   if (/already belongs/i.test(m)) return "هذا الحساب مرتبط بشركة بالفعل";
   if (/not allowed/i.test(m)) return "غير مسموح من إعدادات الشركة";
+  if (/invalid creation code/i.test(m)) return "كود الإنشاء غير صحيح أو ملغي";
+  if (/creation code already used/i.test(m)) return "كود الإنشاء استُخدم من قبل";
   if (/Password should/i.test(m)) return "كلمة السر قصيرة: 6 حروف على الأقل";
   if (/confirm/i.test(m)) return "أكّد بريدك من الرسالة التي وصلتك ثم سجّل دخولك";
   return m;
@@ -143,6 +146,8 @@ function onboarding() {
   view(`<div class="wrap"><div class="top">${LOGO}<button class="btn sm" id="out">خروج</button></div>
     <h1>مرحباً بك</h1><div class="sub">اختر ما يناسبك:</div>
     <div class="card"><h2>أنا صاحب شركة</h2>
+      <label class="f">كود إنشاء الشركة<input id="iv" dir="ltr" placeholder="MGZ-XXXX-XXXX" value="${esc(INVITE)}"></label>
+      <div class="sub" style="margin:-4px 0 6px">تحصل عليه من Mogzy عند الاشتراك.</div>
       <label class="f">اسم الشركة<input id="cn" placeholder="مثال: كافيه Woods"></label>
       <label class="f">اسمك<input id="fn"></label>
       <div class="note" style="margin:10px 0">أتعهد بأخذ موافقة مكتوبة من كل موظف قبل تسجيل وجهه.</div>
@@ -156,7 +161,7 @@ function onboarding() {
   $("out").onclick = logout;
   $("mk").onclick = async () => {
     setErr(""); if (!$("ag").checked) return setErr("لازم توافق على التعهد");
-    try { await rpc("create_company", { p_company_name: val("cn"), p_full_name: val("fn") || "المالك" }); boot(); } catch (e) { setErr(arabicErr(e)); }
+    try { if (!val("iv")) return setErr("اكتب كود إنشاء الشركة"); await rpc("create_company", { p_company_name: val("cn"), p_full_name: val("fn") || "المالك", p_invite: val("iv") }); boot(); } catch (e) { setErr(arabicErr(e)); }
   };
   $("jn").onclick = async () => {
     setErr("");
@@ -182,6 +187,7 @@ async function boot() {
     }
     st.me = me;
     if (me.role === "employee") return loadEmployee();
+    if (me.role === "platform_owner") return loadPlatform();
     return loadAdmin();
   } catch (e) { if (e.status === 401 || /JWT|session/i.test(e.message)) return logout(); view(`<div class="wrap"><div class="err">${esc(arabicErr(e))}</div><button class="btn" onclick="boot()">إعادة المحاولة</button></div>`); }
 }
@@ -314,6 +320,34 @@ function renderEmployee(pay, adv, lv, ses) {
     try { await rpc("request_advance", { p_amount: n, p_repay_month: d.toISOString().slice(0, 7) + "-01" }); loadEmployee(); } catch (e) { setErr(arabicErr(e)); } };
   if ($("ls")) $("ls").onclick = async () => { setErr(""); if (!val("lf") || !val("lt") || val("lt") < val("lf")) return setErr("اختر تاريخاً صحيحاً");
     try { await rpc("request_leave", { p_from: val("lf"), p_to: val("lt"), p_kind: "annual" }); loadEmployee(); } catch (e) { setErr(arabicErr(e)); } };
+}
+
+/* ---------------- PLATFORM OWNER (company codes + all companies) ---------------- */
+const copyText = async (t) => { try { await navigator.clipboard.writeText(t); return true; } catch { prompt("انسخ:", t); return false; } };
+const inviteLink = (c) => location.origin + location.pathname + "?code=" + c;
+async function loadPlatform(fresh) {
+  let o; try { o = await rpc("platform_overview"); } catch (e) { return view(`<div class="wrap"><div class="err">${esc(arabicErr(e))}</div><button class="btn" id="out">خروج</button></div>`), ($("out").onclick = logout); }
+  const free = o.invites.filter((i) => !i.used_at && !i.revoked).length, emps = o.companies.reduce((n, c) => n + Number(c.employees), 0);
+  const inv = (i) => {
+    const chip = i.revoked ? '<span class="chip c-red">ملغي</span>' : i.used_at ? '<span class="chip c-gray">مستخدم</span>' : '<span class="chip c-green">متاح</span>';
+    const co = i.company_id && o.companies.find((c) => c.id === i.company_id);
+    return `<div class="row" style="flex-wrap:wrap;padding:10px 0"><div class="grow"><b dir="ltr" style="display:block;text-align:right;letter-spacing:1px;white-space:nowrap">${esc(i.code)}</b><small>${esc(i.label || "بدون اسم")}${co ? " · " + esc(co.name) : ""}</small></div>${chip}
+      ${!i.used_at && !i.revoked ? `<div style="display:flex;gap:8px;width:100%"><button class="btn sm" style="flex:1" data-cp="${esc(i.code)}">نسخ الرابط</button><button class="btn sm" data-rv="${esc(i.code)}">إلغاء</button></div>` : ""}</div>`;
+  };
+  view(`<div class="wrap"><div class="top">${LOGO}<button class="btn sm" id="out">خروج</button></div>
+    <div class="sub">صاحب المنصة</div><h1>الشركات والأكواد</h1>
+    <div class="stats"><div class="stat"><span>الشركات</span><div>${o.companies.length}</div></div><div class="stat"><span>الموظفون</span><div>${emps}</div></div><div class="stat"><span>أكواد متاحة</span><div>${free}</div></div></div>
+    <div class="card"><h2>كود إنشاء شركة جديدة</h2><div class="sub">اكتب اسم العميل ثم أنشئ الكود وابعته له.</div>
+      <label class="f">اسم العميل (لك أنت فقط)<input id="lb" placeholder="مثال: صيدلية النور"></label>
+      <button class="btn p full" id="mk">إنشاء كود</button>
+      ${fresh ? `<div class="note" style="margin-top:12px"><div class="code" style="font-size:28px">${esc(fresh)}</div><div style="margin-top:8px"><button class="btn p sm" data-cp="${esc(fresh)}">نسخ الرابط</button></div></div>` : ""}
+      <div id="err" class="err"></div></div>
+    <div class="card"><h2>الأكواد</h2>${o.invites.map(inv).join("") || '<div class="sub">لا توجد أكواد بعد.</div>'}</div>
+    <div class="card"><h2>الشركات</h2>${o.companies.map((c) => `<div class="row"><div class="grow"><b>${esc(c.name)}</b><small>المالك: ${esc(c.owner || "-")} · كود الموظفين ${esc(c.code)}</small><small>${c.employees} موظف · ${c.with_face} بوجه مسجّل · ${c.last_punch ? "آخر بصمة " + new Date(c.last_punch).toLocaleDateString("ar-EG", { day: "numeric", month: "short" }) : "لا بصمات بعد"}</small></div></div>`).join("") || '<div class="sub">لا توجد شركات.</div>'}</div></div>`);
+  $("out").onclick = logout;
+  $("mk").onclick = async () => { setErr(""); try { const c = await rpc("platform_create_invite", { p_label: val("lb") }); loadPlatform(c); } catch (e) { setErr(arabicErr(e)); } };
+  document.querySelectorAll("[data-cp]").forEach((b) => (b.onclick = async () => { const ok = await copyText(inviteLink(b.dataset.cp)); if (ok) { b.textContent = "تم النسخ ✓"; } }));
+  document.querySelectorAll("[data-rv]").forEach((b) => (b.onclick = async () => { if (!confirm("إلغاء هذا الكود؟")) return; try { await rpc("platform_revoke_invite", { p_code: b.dataset.rv }); loadPlatform(); } catch (e) { alert(arabicErr(e)); } }));
 }
 
 boot();
