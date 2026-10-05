@@ -35,7 +35,7 @@ input[type=date],input[type=time],input[type=month]{-webkit-appearance:none;appe
 .g2k{display:grid;grid-template-columns:1fr 1fr;gap:10px}.sheet .g2k input{padding:0 8px;font-size:16px}@media(max-width:640px){.at th,.at td{display:table-cell!important}.at td{padding:10px 4px}}
 .btns{display:flex;gap:10px;margin:0 0 12px}.sheet .btns{margin:22px 0 0}.clk{cursor:pointer}.clk:active{background:var(--soft)}
 .ov{position:fixed;inset:0;background:rgba(31,27,23,.55);display:grid;place-items:center;z-index:90;padding:16px}.sheet{background:var(--surface);border-radius:20px;padding:20px;max-width:420px;width:100%;max-height:90vh;overflow:auto}
-.ps h2{margin:0}.ps h3{margin:14px 0 8px;font-size:17px}.ps table{width:100%}.ps td{padding:6px 0;border-bottom:1px solid var(--line)}.ps tr.d td:first-child{color:var(--red)}.ps tr.tot td{font-weight:700;border-bottom:0;font-size:18px}.sig{margin-top:28px;color:var(--mute);font-size:14px}
+.ps tr.dt td{font-size:13px;color:var(--mute);padding:3px 14px 3px 0;border-bottom:0}.ps tr.dt td.n{padding-right:0}.ps h2{margin:0}.ps h3{margin:14px 0 8px;font-size:17px}.ps table{width:100%}.ps td{padding:6px 0;border-bottom:1px solid var(--line)}.ps tr.d td:first-child{color:var(--red)}.ps tr.tot td{font-weight:700;border-bottom:0;font-size:18px}.sig{margin-top:28px;color:var(--mute);font-size:14px}
 #pa{display:none}
 @media print{body.printing>*:not(#pa){display:none!important}body.printing #pa{display:block;padding:16px;color:#000;background:#fff}#pa table{width:100%;border-collapse:collapse}#pa th,#pa td{border:1px solid #bbb;padding:6px 8px;text-align:right}#pa td.n{text-align:left}#pa td.sg{width:90px}#pa .ps td{border:0;border-bottom:1px solid #ddd}}
 .row{display:flex;align-items:center;gap:12px;min-height:60px;border-bottom:1px solid var(--line)}
@@ -477,12 +477,61 @@ function payCsv(rows) {
   const blob = new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
   const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "mogzy-payroll-" + st.month.slice(0, 7) + ".csv"; document.body.appendChild(a); a.click(); a.remove();
 }
-function payslipHtml(e, r) {
-  const L = (t, v, cls = "") => Number(v) ? `<tr class="${cls}"><td>${t}</td><td class="n">${money(v)}</td></tr>` : "";
-  return `<div class="ps"><h2>${esc(st.co.name)}</h2><div class="sub">قسيمة مرتب · ${monthLabel(st.month)}</div><h3>${esc(e.full_name)}${e.job_title ? " · " + esc(e.job_title) : ""}</h3>
-   <table><tr><td>الأساسي</td><td class="n">${money(r.base_pay)}</td></tr>${L("أجر الإضافي (" + Number(r.overtime_hours || 0) + " ساعة)", r.overtime_pay)}${L("أجر يوم الراحة", r.rest_day_pay)}${L("مكافآت", r.bonuses)}
-   ${L("خصم الغياب (" + Number(r.absent_days || 0) + " يوم)", r.absence_deduction, "d")}${L("خصم التأخير", r.late_deduction, "d")}${L("خصم الانصراف المبكر", r.early_leave_deduction, "d")}${L("خصومات أخرى", r.deductions, "d")}${L("جزاءات", r.penalties_applied, "d")}${L("تأمينات", r.insurance, "d")}${L("ضريبة دخل", r.income_tax, "d")}${L("سلف مخصومة", r.advances_deducted, "d")}
+const dayL = (d) => new Date(d + "T12:00:00").toLocaleDateString("ar-EG-u-nu-latn", { weekday: "long", day: "numeric", month: "numeric" });
+const fmtMin = (m) => (m >= 60 ? Math.floor(m / 60) + " س" + (m % 60 ? " و" + (m % 60) + " د" : "") : m + " د");
+function payslipHtml(e, r, det, adj, advs) {
+  const inf = (det && det.info) || null, its = (det && det.items) || [], of = (k) => its.filter((i) => i.kind === k);
+  const L = (t, v, cls = "") => (Number(v) ? `<tr class="${cls}"><td>${t}</td><td class="n">${money(v)}</td></tr>` : "");
+  const D = (t, v, z) => `<tr class="dt"><td>${t}</td><td class="n">${v === "" || v === undefined ? "" : (Number(v) ? money(v) : "—")}</td></tr>`;
+  const ad = (k) => (adj || []).filter((x) => x.kind === k);
+  const adjRows = (k) => ad(k).map((x) => D("• " + esc(x.reason || "بدون سبب"), x.amount)).join("");
+  const abs = of("absent"), absPaid = abs.filter((i) => Number(i.amount) > 0);
+  const ot = of("overtime"), otNote = inf && inf.overtime_raw_minutes !== inf.overtime_paid_minutes ? D(`المحسوب بعد التقريب: ${fmtMin(inf.overtime_paid_minutes)} من ${fmtMin(inf.overtime_raw_minutes)}`, "") : "";
+  const head = inf ? `<div class="sub" style="margin:6px 0 10px;line-height:1.9">المرتب الشهري <b>${money(e.monthly_salary)}</b> ÷ <b>${inf.days_basis}</b> يوم = أجر اليوم <b>${money(inf.day_rate)}</b> · أجر الساعة <b>${money(inf.hourly_rate)}</b> (الشيفت ${Number(inf.shift_hours)} ساعات)<br>الشهر ${inf.days_in_month} يوم · أيام العمل المحسوبة ${inf.scheduled_days} · الإجازات ${inf.off_days} · أيام حضر فيها ${inf.present_days}${new Date(inf.as_of) < new Date(String(st.month).slice(0, 8) + inf.days_in_month) ? `<br>محسوب لحد ${dayL(inf.as_of)} (باقي الشهر لسه ماجاش)` : ""}</div>` : "";
+  return `<div class="ps"><h2>${esc(st.co.name)}</h2><div class="sub">قسيمة مرتب · ${monthLabel(st.month)}</div><h3>${esc(e.full_name)}${e.job_title ? " · " + esc(e.job_title) : ""}</h3>${head}
+   <table><tr><td><b>الأساسي</b></td><td class="n"><b>${money(r.base_pay)}</b></td></tr>
+   ${L("أجر الإضافي (" + Number(r.overtime_hours || 0) + " ساعة)", r.overtime_pay)}${ot.map((i) => D(`${dayL(i.day)} · ${fmtMin(i.minutes)}${i.note ? " (" + i.note + ")" : ""}`, i.amount)).join("")}${otNote}
+   ${L("أجر يوم الراحة", r.rest_day_pay)}${of("rest").map((i) => D(`${dayL(i.day)} · اشتغل ${fmtMin(i.minutes)}`, i.amount)).join("")}
+   ${L("مكافآت", r.bonuses)}${adjRows("bonus")}
+   ${L("خصم الغياب (" + Number(r.absent_days || 0) + " يوم)", r.absence_deduction, "d")}${abs.map((i) => D(`${dayL(i.day)} · ${esc(i.note)}`, i.amount)).join("")}
+   ${L("خصم التأخير", r.late_deduction, "d")}${of("late").map((i) => D(`${dayL(i.day)} · تأخر ${fmtMin(i.minutes)}${i.note ? " (" + esc(i.note) + ")" : ""}${i.pct ? " · " + i.pct + "% من اليوم" : ""}`, i.amount)).join("")}
+   ${L("خصم الانصراف المبكر", r.early_leave_deduction, "d")}${of("early").map((i) => D(`${dayL(i.day)} · مشي قبل الميعاد بـ ${fmtMin(i.minutes)}${i.note ? " (" + esc(i.note) + ")" : ""}`, i.amount)).join("")}
+   ${L("خصومات أخرى", r.deductions, "d")}${adjRows("deduction")}${L("جزاءات", r.penalties_applied, "d")}${adjRows("penalty")}
+   ${L("سلف مخصومة", r.advances_deducted, "d")}${(advs || []).map((x) => D("• سلفة", x.amount)).join("")}
+   ${L("تأمينات", r.insurance, "d")}${L("ضريبة دخل", r.income_tax, "d")}
    <tr class="tot"><td>الصافي</td><td class="n">${money(r.net_pay)} ج.م</td></tr></table><div class="sig">توقيع الموظف: ____________________</div></div>`;
+}
+async function slipSheet(e) {
+  const o = overlay(); let changed = false, r = null, det = null, adj = [], advs = [];
+  const m = String(st.month).slice(0, 10);
+  const draw = async () => {
+    try {
+      const [rr, dd, aa, vv] = await Promise.all([rpc("payroll_month", { p_employee: e.id, p_month: m }), rpc("payroll_details", { p_employee: e.id, p_month: m }).catch(() => null),
+        db(`adjustments?select=id,kind,amount,reason&employee_id=eq.${e.id}&period_month=eq.${m}&order=created_at`).catch(() => []), db(`advances?select=id,amount&employee_id=eq.${e.id}&repay_month=eq.${m}&status=eq.approved`).catch(() => [])]);
+      r = Array.isArray(rr) ? rr[0] : rr; det = dd; adj = aa; advs = vv;
+    } catch (x) { o.innerHTML = `<div class="sheet"><div class="err">${esc(arabicErr(x))}</div><div class="btns"><button class="btn sm" id="pc">إغلاق</button></div></div>`; o.querySelector("#pc").onclick = () => o.remove(); return; }
+    o.innerHTML = `<div class="sheet">${payslipHtml(e, r, det, adj, advs)}
+      <div class="btns"><button class="btn p sm" id="ps">طباعة القسيمة</button><button class="btn sm" id="pc">إغلاق</button></div>
+      <details class="adv"><summary>إضافة مكافأة أو خصم أو جزاء أو سلفة</summary>
+        <label class="f">النوع<select id="ak"><option value="bonus">مكافأة</option><option value="deduction">خصم</option><option value="penalty">جزاء</option><option value="advance">سلفة (تتخصم من الشهر ده)</option></select></label>
+        <div class="g2k"><label class="f">المبلغ<input id="aa" type="number" inputmode="decimal"></label><label class="f">السبب<input id="ar"></label></div>
+        <div id="ae" class="err"></div><div class="btns"><button class="btn p sm" id="aadd">إضافة</button></div>
+        ${adj.length || advs.length ? `<div class="sub">المضاف للشهر ده:</div>${adj.map((x) => `<div class="row" style="min-height:44px"><div class="grow">${{ bonus: "مكافأة", deduction: "خصم", penalty: "جزاء" }[x.kind]} · ${money(x.amount)} ${esc(x.reason || "")}</div><button class="btn sm" data-da="adjustments|${x.id}">حذف</button></div>`).join("")}${advs.map((x) => `<div class="row" style="min-height:44px"><div class="grow">سلفة · ${money(x.amount)}</div><button class="btn sm" data-da="advances|${x.id}">حذف</button></div>`).join("")}` : ""}
+      </details></div>`;
+    const q = (id) => o.querySelector(id), er = (t) => (q("#ae").textContent = t);
+    q("#pc").onclick = () => { o.remove(); if (changed) tabPay(); };
+    q("#ps").onclick = () => printHtml(payslipHtml(e, r, det, adj, advs));
+    q("#aadd").onclick = async () => {
+      const k = q("#ak").value, amt = Number(q("#aa").value); if (!(amt > 0)) return er("اكتب المبلغ");
+      try {
+        if (k === "advance") await db("advances", { method: "POST", prefer: "return=minimal", body: { company_id: st.co.id, employee_id: e.id, amount: amt, repay_month: m, status: "approved", decided_by: S.user.id, decided_at: new Date().toISOString() } });
+        else await db("adjustments", { method: "POST", prefer: "return=minimal", body: { company_id: st.co.id, employee_id: e.id, period_month: m, kind: k, amount: amt, reason: q("#ar").value.trim() || null, created_by: S.user.id } });
+        changed = true; await draw();
+      } catch (x) { er(arabicErr(x)); }
+    };
+    o.querySelectorAll("[data-da]").forEach((b) => (b.onclick = async () => { const [t, id] = b.dataset.da.split("|"); if (!confirm("حذف؟")) return; try { await db(`${t}?id=eq.${id}`, { method: "DELETE" }); changed = true; await draw(); } catch (x) { er(arabicErr(x)); } }));
+  };
+  await draw();
 }
 async function tabPay() {
   $("body").innerHTML = `<h1>المرتبات</h1><div class="card"><label class="f">الشهر<input id="pm" type="month" value="${st.month.slice(0, 7)}"></label><div id="pt" class="sub">جاري الحساب…</div></div>`;
@@ -497,11 +546,7 @@ async function tabPay() {
       <tr><td><b>الإجمالي</b></td><td></td><td></td><td></td><td></td><td class="n"><b>${money(sum)}</b></td></tr></table><div class="sub" style="margin-top:8px">اضغط على اسم موظف لعرض قسيمة مرتبه وطباعتها.</div>`;
     $("px").onclick = () => payXlsx(rows);
     $("pp").onclick = () => printHtml(`<h2>${esc(st.co.name)}</h2><div class="sub">كشف المرتبات · ${monthLabel(st.month)}</div><table><tr><th>الموظف</th><th>الأساسي</th><th>إضافي</th><th>خصومات</th><th>سلف</th><th>الصافي</th><th>التوقيع</th></tr>${rows.map(({ e, r }) => { const t = payTotals(r); return `<tr><td>${esc(e.full_name)}</td><td class="n">${money(r.base_pay)}</td><td class="n">${money(t.extra)}</td><td class="n">${money(t.ded)}</td><td class="n">${money(r.advances_deducted)}</td><td class="n"><b>${money(r.net_pay)}</b></td><td class="sg"></td></tr>`; }).join("")}<tr><td><b>الإجمالي</b></td><td></td><td></td><td></td><td></td><td class="n"><b>${money(sum)}</b></td><td></td></tr></table>`);
-    document.querySelectorAll("tr.clk").forEach((tr) => (tr.onclick = () => {
-      const { e, r } = rows[Number(tr.dataset.i)], o = document.createElement("div");
-      o.className = "ov"; o.innerHTML = `<div class="sheet">${payslipHtml(e, r)}<div class="btns"><button class="btn p sm" id="ps">طباعة القسيمة</button><button class="btn sm" id="pc">إغلاق</button></div></div>`;
-      document.body.appendChild(o); o.querySelector("#pc").onclick = () => o.remove(); o.querySelector("#ps").onclick = () => printHtml(payslipHtml(e, r));
-    }));
+    document.querySelectorAll("tr.clk").forEach((tr) => (tr.onclick = () => slipSheet(rows[Number(tr.dataset.i)].e)));
   } catch (e) { $("pt").innerHTML = `<span class="err">${esc(arabicErr(e))}</span>`; }
 }
 function tabSet() {
