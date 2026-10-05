@@ -36,8 +36,9 @@ input[type=date],input[type=time],input[type=month]{-webkit-appearance:none;appe
 .g2k{display:grid;grid-template-columns:1fr 1fr;gap:10px}.sheet .g2k input{padding:0 8px;font-size:16px}@media(max-width:640px){.at th,.at td,.cal th,.cal td{display:table-cell!important}.at td{padding:10px 4px}}
 .btns{display:flex;gap:10px;margin:0 0 12px}.sheet .btns{margin:22px 0 0}.clk{cursor:pointer}.clk:active{background:var(--soft)}
 .ov{position:fixed;inset:0;background:rgba(31,27,23,.55);display:grid;place-items:center;z-index:90;padding:16px}.sheet{background:var(--surface);border-radius:20px;padding:20px;max-width:420px;width:100%;max-height:90vh;overflow:auto}
-.ps table.sum td{padding:5px 0}.ps .nt{font-size:13px;color:var(--mute);line-height:1.9;margin:10px 0}.ps table.cal{font-size:12.5px;margin-top:10px}.ps table.cal th{font-size:12px;padding:5px 4px;border-bottom:1px solid var(--ink);color:var(--ink);font-weight:600}.ps table.cal td{padding:4px 4px;border-bottom:1px solid var(--line)}.ps table.cal tr.mu td{color:#aaa;background:#faf8f4}.ps table.cal tr.bad td{color:var(--red)}.ps table.cal tr.good td{color:#2f7d4f}.ps table.cal td.n{direction:ltr;text-align:center}.ps table.cal td:last-child{text-align:left;direction:ltr}
-@media print{#pa table.cal td,#pa table.cal th{padding:2px 5px;font-size:11px}#pa table.cal tr.mu td{background:#f3f3f3}#pa .nt{font-size:11px}}
+.ps .nt{font-size:13px;color:var(--mute);line-height:1.9;margin:10px 0}.strip{display:grid;grid-template-columns:repeat(5,1fr);border:1px solid #cfc7ba;border-radius:12px;overflow:hidden;margin:10px 0 14px}.strip>div{padding:8px 4px;text-align:center;border-left:1px solid #cfc7ba}.strip>div:last-child{border-left:0}.strip span{display:block;font-size:12px;color:var(--mute)}.strip b{font-size:15px}.strip .r b{color:var(--red)}.strip .net{background:var(--ink)}.strip .net span,.strip .net b{color:#fff}
+.ps table.cal{width:100%;border-collapse:collapse;font-size:13px}.ps table.cal th{background:var(--ink);color:#fff;font-weight:600;font-size:12.5px;padding:7px 4px;border:1px solid var(--ink)}.ps table.cal td{border:1px solid #d9d2c7;padding:6px 4px;text-align:center}.ps table.cal td.dy,.ps table.cal td.nt2{text-align:right}.ps table.cal td.dy{white-space:nowrap;font-weight:500}.ps table.cal td.nt2{min-width:96px;font-size:12px}.ps table.cal td{padding:6px 3px}.ps table.cal tr.mu td{color:#a39a8d;background:#f6f3ee}.ps table.cal tr.bad td{background:#fdf1ef}.ps table.cal tr.bad td:nth-child(5){color:var(--red);font-weight:700}.ps table.cal tr.good td:nth-child(6){color:#2f7d4f;font-weight:700}.ps table.cal tr.tt td{font-weight:700;background:#efeae1}
+@media print{#pa .strip{border-color:#888}#pa .strip>div{border-color:#888}#pa .strip .net{background:#222;-webkit-print-color-adjust:exact;print-color-adjust:exact}#pa table.cal th{background:#222!important;color:#fff!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;border-color:#222}#pa table.cal td{padding:2px 4px;font-size:11px;border:1px solid #999;text-align:center}#pa table.cal td.dy,#pa table.cal td.nt2{text-align:right}#pa table.cal tr.mu td{background:#f1f1f1!important}#pa .nt{font-size:11px}}
 .ps tr.dt td{font-size:13px;color:var(--mute);padding:3px 14px 3px 0;border-bottom:0}.ps tr.dt td.n{padding-right:0}.ps h2{margin:0}.ps h3{margin:14px 0 8px;font-size:17px}.ps table{width:100%}.ps td{padding:6px 0;border-bottom:1px solid var(--line)}.ps tr.d td:first-child{color:var(--red)}.ps tr.tot td{font-weight:700;border-bottom:0;font-size:18px}.sig{margin-top:28px;color:var(--mute);font-size:14px}
 #pa{display:none}
 @media print{body.printing>*:not(#pa){display:none!important}body.printing #pa{display:block;padding:16px;color:#000;background:#fff}#pa table{width:100%;border-collapse:collapse}#pa th,#pa td{border:1px solid #bbb;padding:6px 8px;text-align:right}#pa td.n{text-align:left}#pa td.sg{width:90px}#pa .ps td{border:0;border-bottom:1px solid #ddd}}
@@ -489,49 +490,52 @@ const fmtMin = (m) => (m >= 60 ? Math.floor(m / 60) + " س" + (m % 60 ? " و" + 
 function payslipHtml(e, r, det, adj, advs, ses, advAll) {
   const inf = (det && det.info) || null, its = (det && det.items) || [];
   const mon = String(st.month).slice(0, 7), dim = inf ? inf.days_in_month : new Date(Number(mon.slice(0, 4)), Number(mon.slice(5, 7)), 0).getDate();
-  const L = (t, v, cls = "") => `<tr class="${cls}"><td>${t}</td><td class="n">${Number(v) ? money(v) : "—"}</td></tr>`;
-  const Lz = (t, v, cls = "") => (Number(v) ? L(t, v, cls) : "");
-  const wd = (iso) => new Date(iso + "T12:00:00").toLocaleDateString("ar-EG-u-nu-latn", { weekday: "short" });
+  const wd = (iso) => new Date(iso + "T12:00:00").toLocaleDateString("ar-EG-u-nu-latn", { weekday: "long" });
   const byDay = {}; its.forEach((i) => (byDay[i.day] = byDay[i.day] || []).push(i));
   const sesDay = {}; (ses || []).forEach((x) => (sesDay[x.work_date] = sesDay[x.work_date] || []).push(x));
-  const offs = new Set((inf && inf.off_dates) || []);
-  const rows = [];
+  const offs = new Set((inf && inf.off_dates) || []), cell = (v) => (v ? money(v) : "");
+  let tDed = 0, tAdd = 0; const rows = [];
   for (let d = 1; d <= dim; d++) {
     const iso = `${mon}-${String(d).padStart(2, "0")}`, ss = sesDay[iso] || [], it = byDay[iso] || [];
     const tin = ss.length ? hhmm(ss[0].check_in) : "", tout = ss.length && ss[ss.length - 1].check_out ? hhmm(ss[ss.length - 1].check_out) : "";
-    let st_ = "", cls = "", amt = 0;
-    const future = inf && iso > inf.as_of, before = inf && iso < String(inf.hired_on).slice(0, 10);
-    if (before) { st_ = "قبل التعيين"; cls = "mu"; }
-    else if (offs.has(iso) && !it.length) { st_ = ss.length ? "حضر في الإجازة" : "إجازة"; cls = "mu"; }
-    else if (future) { st_ = ""; cls = "mu"; }
+    let note = "", cls = "", ded = 0, add = 0;
+    if (inf && iso < String(inf.hired_on).slice(0, 10)) { note = "قبل التعيين"; cls = "mu"; }
+    else if (offs.has(iso) && !it.length) { note = ss.length ? "حضر في الإجازة" : "إجازة"; cls = "mu"; }
+    else if (inf && iso > inf.as_of) { cls = "mu"; }
     else {
       const parts = [];
       it.forEach((i) => {
-        const a = Number(i.amount) || 0;
-        if (i.kind === "absent") { parts.push(i.note === "غياب" ? "غياب" : "غياب · " + i.note); amt -= a; }
-        else if (i.kind === "late") { parts.push("تأخر " + fmtMin(i.minutes) + (i.note === "معفى" ? " (معفى)" : "")); amt -= a; }
-        else if (i.kind === "early") { parts.push("انصرف بدري " + fmtMin(i.minutes) + (i.note === "معفى" ? " (معفى)" : "")); amt -= a; }
-        else if (i.kind === "overtime") { parts.push("إضافي " + fmtMin(i.minutes)); amt += a; }
-        else if (i.kind === "rest") { parts.push("شغل في الإجازة"); amt += a; }
+        const a2 = Number(i.amount) || 0;
+        if (i.kind === "absent") { parts.push(i.note === "غياب" ? "غياب" : "غياب (" + i.note + ")"); ded += a2; }
+        else if (i.kind === "late") { parts.push("تأخير " + fmtMin(i.minutes) + (i.note === "معفى" ? " (معفى)" : "")); ded += a2; }
+        else if (i.kind === "early") { parts.push("انصراف مبكر " + fmtMin(i.minutes) + (i.note === "معفى" ? " (معفى)" : "")); ded += a2; }
+        else if (i.kind === "overtime") { parts.push("إضافي " + fmtMin(i.minutes)); add += a2; }
+        else if (i.kind === "rest") { parts.push("شغل في الإجازة"); add += a2; }
       });
-      st_ = parts.join(" · ") || (ss.length ? "حاضر" : "");
-      cls = it.some((i) => i.kind === "absent" && Number(i.amount) > 0) || it.some((i) => (i.kind === "late" || i.kind === "early") && Number(i.amount) > 0) ? "bad" : amt > 0 ? "good" : "";
+      note = parts.join(" + ") || (ss.length ? "حاضر" : "");
+      cls = ded > 0 ? "bad" : add > 0 ? "good" : "";
     }
-    rows.push(`<tr class="${cls}"><td>${wd(iso)} ${d}</td><td class="n">${tin}</td><td class="n">${tout}</td><td>${esc(st_)}</td><td class="n">${amt ? (amt > 0 ? "+" : "−") + money(Math.abs(amt)) : ""}</td></tr>`);
+    tDed += ded; tAdd += add;
+    rows.push(`<tr class="${cls}"><td class="dy">${d} ${wd(iso)}</td><td>${tin}</td><td>${tout}</td><td class="nt2">${esc(note)}</td><td>${cell(ded)}</td><td>${cell(add)}</td></tr>`);
   }
-  const head = inf ? `<div class="sub" style="margin:4px 0 10px;line-height:1.8">المرتب ${money(e.monthly_salary)} ÷ ${inf.days_basis} يوم = أجر اليوم ${money(inf.day_rate)} · أجر الساعة ${money(inf.hourly_rate)}${new Date(inf.as_of) < new Date(mon + "-" + String(dim).padStart(2, "0")) ? `<br>محسوب لحد ${dayL(inf.as_of)}` : ""}</div>` : "";
   const ad = (k) => (adj || []).filter((x) => x.kind === k);
-  const notes = [...ad("bonus").map((x) => "مكافأة " + money(x.amount) + (x.reason ? " — " + esc(x.reason) : "")), ...ad("deduction").map((x) => "خصم " + money(x.amount) + (x.reason ? " — " + esc(x.reason) : "")), ...ad("penalty").map((x) => "جزاء " + money(x.amount) + (x.reason ? " — " + esc(x.reason) : ""))];
-  const advLines = (advAll || []).map((x) => `سلفة ${money(x.amount)} — ${x.status === "pending" ? "بانتظار موافقتك (مش محسوبة لسه)" : String(x.repay_month).slice(0, 7) === mon ? "معتمدة وتتخصم الشهر ده" : "على شهر " + String(x.repay_month).slice(0, 7)}`);
-  return `<div class="ps"><h2>${esc(st.co.name)}</h2><div class="sub">قسيمة مرتب · ${monthLabel(st.month)}</div><h3>${esc(e.full_name)}${e.job_title ? " · " + esc(e.job_title) : ""}</h3>${head}
-   <table class="sum"><tr><td><b>الأساسي</b></td><td class="n"><b>${money(r.base_pay)}</b></td></tr>
-   ${Lz("+ أجر الإضافي (" + Number(r.overtime_hours || 0) + " ساعة)", r.overtime_pay)}${Lz("+ أجر يوم الراحة", r.rest_day_pay)}${Lz("+ مكافآت", r.bonuses)}
-   ${L("− الغياب (" + Number(r.absent_days || 0) + " يوم)", r.absence_deduction, "d")}${L("− التأخير", r.late_deduction, "d")}${L("− الانصراف المبكر", r.early_leave_deduction, "d")}
-   ${Lz("− خصومات أخرى", r.deductions, "d")}${Lz("− جزاءات", r.penalties_applied, "d")}${L("− سلف", r.advances_deducted, "d")}${Lz("− تأمينات", r.insurance, "d")}${Lz("− ضريبة دخل", r.income_tax, "d")}
-   <tr class="tot"><td>الصافي</td><td class="n">${money(r.net_pay)} ج.م</td></tr></table>
-   ${advLines.length || notes.length ? `<div class="nt">${[...advLines, ...notes].map((t) => "• " + t).join("<br>")}</div>` : ""}
-   <table class="cal"><tr><th>اليوم</th><th>حضور</th><th>انصراف</th><th>الحالة</th><th>الأثر</th></tr>${rows.join("")}</table>
-   ${inf && inf.overtime_raw_minutes !== inf.overtime_paid_minutes ? `<div class="nt">الإضافي بعد التقريب: ${fmtMin(inf.overtime_paid_minutes)} من ${fmtMin(inf.overtime_raw_minutes)}</div>` : ""}
+  const oth = [];
+  const O = (t, ded, add) => oth.push(`<tr><td colspan="3" class="nt2">${t}</td><td>${cell(ded)}</td><td>${cell(add)}</td></tr>`);
+  ad("bonus").forEach((x) => O("مكافأة" + (x.reason ? " — " + esc(x.reason) : ""), 0, x.amount));
+  ad("deduction").forEach((x) => O("خصم" + (x.reason ? " — " + esc(x.reason) : ""), x.amount, 0));
+  ad("penalty").forEach((x) => O("جزاء" + (x.reason ? " — " + esc(x.reason) : ""), x.amount, 0));
+  (advs || []).forEach((x) => O("سلفة", x.amount, 0));
+  if (Number(r.insurance)) O("تأمينات", r.insurance, 0);
+  if (Number(r.income_tax)) O("ضريبة دخل", r.income_tax, 0);
+  const t = payTotals(r), extra = t.extra, ded = t.ded + Number(r.advances_deducted || 0);
+  const pend = (advAll || []).filter((x) => x.status === "pending" || String(x.repay_month).slice(0, 7) !== mon).map((x) => `سلفة ${money(x.amount)} ${x.status === "pending" ? "بانتظار الموافقة (غير محسوبة)" : "على شهر " + String(x.repay_month).slice(0, 7)}`);
+  const asOf = inf && new Date(inf.as_of) < new Date(mon + "-" + String(dim).padStart(2, "0")) ? ` · محسوب لحد ${inf.as_of.slice(8)}/${inf.as_of.slice(5, 7)}` : "";
+  return `<div class="ps"><h2>${esc(st.co.name)}</h2><div class="sub">قسيمة مرتب · ${monthLabel(st.month)}${asOf}</div><h3>${esc(e.full_name)}${e.job_title ? " · " + esc(e.job_title) : ""}</h3>
+   <div class="strip"><div><span>الأساسي</span><b>${money(r.base_pay)}</b></div><div><span>إضافات</span><b>${money(extra)}</b></div><div class="r"><span>خصومات</span><b>${money(t.ded)}</b></div><div class="r"><span>سلف</span><b>${money(r.advances_deducted)}</b></div><div class="net"><span>الصافي</span><b>${money(r.net_pay)}</b></div></div>
+   <table class="cal"><tr><th>اليوم</th><th>حضور</th><th>انصراف</th><th>ملاحظات</th><th>خصم</th><th>إضافة</th></tr>${rows.join("")}<tr class="tt"><td colspan="4">إجمالي الأيام</td><td>${cell(Math.round(tDed))}</td><td>${cell(Math.round(tAdd))}</td></tr></table>
+   ${oth.length ? `<table class="cal" style="margin-top:12px"><tr><th colspan="3">بنود أخرى</th><th>خصم</th><th>إضافة</th></tr>${oth.join("")}</table>` : ""}
+   ${pend.length ? `<div class="nt">${pend.map((x) => "• " + x).join("<br>")}</div>` : ""}
+   ${inf && inf.overtime_raw_minutes !== inf.overtime_paid_minutes ? `<div class="nt">• الإضافي بعد التقريب: ${fmtMin(inf.overtime_paid_minutes)} من ${fmtMin(inf.overtime_raw_minutes)}</div>` : ""}
    <div class="sig">توقيع الموظف: ____________________</div></div>`;
 }
 const nextM = (m) => { const [y, mo] = m.split('-').map(Number); return mo === 12 ? `${y + 1}-01-01` : `${y}-${String(mo + 1).padStart(2, '0')}-01`; };
