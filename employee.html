@@ -268,8 +268,26 @@ function tabToday() {
   const act = st.emps.filter((e) => e.active), rows = act.map((e) => ({ e, s: statusOf(e) }));
   const inN = rows.filter((r) => r.s.k === "in").length, ab = rows.filter((r) => r.s.k === "absent").length;
   $("body").innerHTML = `<h1>اليوم</h1><div class="stats"><div class="stat"><span>داخل الآن</span><div>${inN}</div></div><div class="stat"><span>لم يحضر</span><div>${ab}</div></div><div class="stat"><span>تنتظر موافقتك</span><div>${st.adv.length + st.lv.length}</div></div></div>
-   <div class="card">${rows.length ? rows.map(({ e, s }) => `<div class="row"><div class="grow"><b>${esc(e.full_name)}</b><small>${esc(s.sub)}</small></div>${s.chip}<button class="btn sm" data-w="${e.id}">إعفاء</button></div>`).join("") : '<div class="sub">لا يوجد موظفون بعد. أضفهم من تبويب الموظفون.</div>'}</div>`;
-  document.querySelectorAll("[data-w]").forEach((b) => (b.onclick = () => waiveSheet(b.dataset.w)));
+   <div class="card">${rows.length ? rows.map(({ e, s }) => `<div class="row" data-v="${e.id}" style="cursor:pointer"><div class="grow"><b>${esc(e.full_name)}</b><small>${esc(s.sub)}</small></div>${s.chip}<button class="btn sm" data-w="${e.id}">إعفاء</button></div>`).join("") : '<div class="sub">لا يوجد موظفون بعد. أضفهم من تبويب الموظفون.</div>'}</div>`;
+  document.querySelectorAll("[data-w]").forEach((b) => (b.onclick = (ev) => { ev.stopPropagation(); waiveSheet(b.dataset.w); }));
+  document.querySelectorAll("[data-v]").forEach((r) => (r.onclick = () => todaySheet(st.emps.find((x) => x.id === r.dataset.v))));
+}
+async function todaySheet(e) {
+  const o = overlay(), s = statusOf(e), mon = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 7);
+  o.innerHTML = `<div class="sheet"><button type="button" class="xclose" aria-label="إغلاق">✕</button><h2>${esc(e.full_name)}</h2><div class="sub">${esc(e.job_title || "")}</div><div class="card" style="margin:10px 0;padding:6px 16px"><div class="row" style="min-height:44px"><div class="grow"><b>النهاردة</b><small>${esc(s.sub)}</small></div>${s.chip}</div></div><div id="tb" class="sub">جاري تحميل الملخص…</div></div>`;
+  let pay = null, list = [];
+  try { const r = await rpc("payroll_month", { p_employee: e.id, p_month: mon + "-01" }); pay = Array.isArray(r) ? r[0] : r; } catch {}
+  try { list = await db(`attendance_sessions?select=work_date,check_in&employee_id=eq.${e.id}&work_date=gte.${mon}-01&order=work_date.asc`); } catch {}
+  const [sh, sm] = e.shift_start.split(":").map(Number), grace = (st.set && st.set.late_grace_minutes) || 0;
+  const lates = list.filter((x) => { const c = new Date(x.check_in); return c.getHours() * 60 + c.getMinutes() - (sh * 60 + sm) > grace; }).length, days = new Set(list.map((x) => x.work_date)).size;
+  const R = (a, b, big) => `<div class="row" style="min-height:${big ? 46 : 40}px"><div class="grow">${a}</div><b${big ? ' style="font-size:20px"' : ""}>${b}</b></div>`;
+  const t = pay ? payTotals(pay) : null;
+  const tb = o.querySelector("#tb"); if (!tb) return;
+  tb.outerHTML = `<div class="sub" style="margin:6px 0">ملخص ${monthLabel(mon + "-01")} لحد النهاردة</div><div class="stats"><div class="stat"><span>أيام حضور</span><div>${days}</div></div><div class="stat"><span>مرات تأخير</span><div>${lates}</div></div><div class="stat"><span>أيام غياب</span><div>${pay ? Number(pay.absent_days || 0) : "—"}</div></div></div>
+   ${pay ? `<div class="card" style="margin:10px 0;padding:6px 16px">${R("المرتب الأساسي لحد النهاردة", money(pay.base_pay) + " ج.م")}${R("إضافي ومكافآت", money(t.extra))}${R("خصومات", money(t.ded))}${R("سلف", money(pay.advances_deducted))}${R("<b>صافي لحد النهاردة</b>", money(pay.net_pay) + " ج.م", 1)}</div>` : '<div class="sub">تعذر تحميل المرتب.</div>'}
+   <div class="btns"><button class="btn p sm" id="t1">كشف المرتب</button><button class="btn sm" id="t2">سجل الحضور</button><button class="btn sm" id="t3">بونص / خصم</button><button class="btn sm" id="t4">إعفاء</button></div>`;
+  const go = (id, f) => { o.querySelector(id).onclick = () => { o.remove(); f(); }; };
+  go("#t1", () => slipSheet(e)); go("#t2", () => attSheet(e)); go("#t3", () => adjSheet(e)); go("#t4", () => waiveSheet(e.id));
 }
 const WK = { absence: "غياب", late: "تأخير", early: "انصراف مبكر" };
 async function waiveSheet(eid) {
@@ -693,6 +711,33 @@ async function tabPay() {
     document.querySelectorAll("tr.clk").forEach((tr) => (tr.onclick = () => slipSheet(rows[Number(tr.dataset.i)].e)));
   } catch (e) { $("pt").innerHTML = `<span class="err">${esc(arabicErr(e))}</span>`; }
 }
+const VAPID = "BLt8Wh_JKMZMeB6KnvUxD4k2Rn8CmVZ8dX3Jq7pCOwgI_-ipU_wT0A1XbTm44DYPtleGt51EG05KAodDERY5Coo";
+const b64u = (b) => Uint8Array.from(atob((b + "=".repeat((4 - (b.length % 4)) % 4)).replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0));
+const ab64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+async function pushInit() {
+  const stt = $("pst"), btn = $("pn"), msg = $("pne"); if (!btn) return;
+  const ios = /iphone|ipad/i.test(navigator.userAgent), standalone = navigator.standalone || matchMedia("(display-mode: standalone)").matches;
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+    stt.textContent = "غير مدعوم"; btn.style.display = "none";
+    msg.textContent = ios && !standalone ? "على الآيفون: افتح الموقع في Safari ← مشاركة ← «إضافة إلى الشاشة الرئيسية»، وافتحه من الأيقونة، وبعدين فعّل الإشعارات." : "المتصفح ده مش بيدعم الإشعارات.";
+    return;
+  }
+  const reg = await navigator.serviceWorker.register("sw.js").then(() => Promise.race([navigator.serviceWorker.ready, new Promise((r) => setTimeout(() => r(null), 5000))])).catch(() => null);
+  if (!reg) { stt.textContent = "تعذر التجهيز"; msg.textContent = "حدّث الصفحة وجرب تاني."; return; }
+  const cur = await reg.pushManager.getSubscription();
+  const paint = () => { const on = Notification.permission === "granted" && cur; stt.textContent = on ? "مفعّلة" : "مقفولة"; btn.textContent = on ? "الإشعارات شغالة ✓" : "تفعيل الإشعارات على الجهاز ده"; btn.disabled = !!on; };
+  paint();
+  btn.onclick = async () => {
+    msg.textContent = "";
+    try {
+      if ((await Notification.requestPermission()) !== "granted") { msg.textContent = "لازم توافق على الإشعارات من نافذة المتصفح."; return; }
+      const sub = (await reg.pushManager.getSubscription()) || (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64u(VAPID) }));
+      const j = sub.toJSON();
+      await db("push_subs?on_conflict=endpoint", { method: "POST", prefer: "resolution=merge-duplicates,return=minimal", body: { company_id: st.co.id, user_id: S.user.id, endpoint: j.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth } });
+      stt.textContent = "مفعّلة"; btn.textContent = "الإشعارات شغالة ✓"; btn.disabled = true; msg.textContent = "تمام، هيوصلك إشعار مع أول طلب.";
+    } catch (x) { msg.textContent = "تعذر التفعيل: " + arabicErr(x); }
+  };
+}
 function tabSet() {
   const s = st.set, tg = (k, l, sub = "") => `<label class="row" style="cursor:pointer"><div class="grow"><b>${l}</b>${sub ? `<small>${sub}</small>` : ""}</div><input type="checkbox" data-k="${k}" ${s[k] ? "checked" : ""}></label>`;
   const num = (k, l, u, h = "") => `<div class="row"><div class="grow"><b>${l}</b>${h ? `<small>${h}</small>` : ""}</div><input type="number" step="any" data-n="${k}" value="${s[k] ?? ""}" style="width:90px;text-align:center"><span class="sub" style="width:44px">${u}</span></div>`;
@@ -714,6 +759,7 @@ function tabSet() {
    ${sec("الراتب والضرائب", onoff(s.apply_income_tax || s.apply_insurance, "ضرائب/تأمينات"), `<div class="sub" style="margin-bottom:6px">مقفولة افتراضياً ولا يُخصم منها شيء.</div>${tg("apply_income_tax", "خصم ضريبة المرتبات")}${tg("apply_insurance", "خصم التأمينات الاجتماعية")}` + adv(`${numn("salary_days_basis", "أيام الشهر لحساب أجر اليوم", "يوم", "فاضي = عدد أيام الشهر الفعلي، أو اكتب 30")}${numn("max_penalty_days_per_month", "أقصى جزاءات في الشهر", "يوم", "فاضي = بدون حد")}`))}
    ${sec("الموظفين على موبايلهم", onoff(s.employee_app_enabled), `<div class="sub" style="margin-bottom:6px">اختياري. الحضور يبقى من الجهاز فقط.</div>
      ${tg("employee_app_enabled", "السماح للموظفين بالدخول من موبايلهم")}${tg("employee_auto_link", "ربط تلقائي إذا تطابق رقم الموبايل", "بدون موافقتك")}${tg("employee_see_salary", "يشوف الموظف مرتبه")}${tg("employee_can_request_advance", "يطلب سلفة")}${tg("employee_can_request_leave", "يطلب إجازة")}`)}
+   ${sec("الإشعارات", '<span id="pst">...</span>', `<div class="sub" style="margin-bottom:8px">يوصلك إشعار على الموبايل لما موظف يطلب سلفة أو إجازة. فعّله على كل جهاز عايز الإشعار عليه.</div><button class="btn p sm" id="pn">تفعيل الإشعارات على الجهاز ده</button><div id="pne" class="sub" style="margin-top:8px"></div>`)}
    ${sec("الكشك والربط", "كود الشركة: " + esc(st.co.code), `<div class="sub">كود شركتك (يعطيه الموظف عند ربط موبايله)</div><div class="code">${esc(st.co.code)}</div>
      <div class="sub" style="margin-top:12px">ابعت للموظف رابط صفحته مع الكود:</div><button class="btn sm" id="cpl" style="margin-top:6px">نسخ رابط الموظفين</button><div style="height:14px"></div><div class="sub">جهاز الباب (الكشك)</div>
      <div class="sub">افتح الرابط على التابلت اللي عند الباب، وسجّل دخولك بحساب الإدارة مرة واحدة لربطه بشركتك، وبعدها يشتغل بالوش فقط.</div>
@@ -722,6 +768,7 @@ function tabSet() {
    <div id="err" class="err"></div><button class="btn p full" id="sv">حفظ</button>
    <div style="height:14px"></div><button class="btn full" id="out">تسجيل الخروج</button>`;
   $("out").onclick = logout;
+  pushInit();
   document.querySelectorAll("#wo .dc").forEach((b) => (b.onclick = () => b.classList.toggle("on")));
   $("cpk").onclick = async () => { const ok = await copyText(new URL("./", location.href).href); if (ok) $("cpk").textContent = "تم النسخ ✓"; };
   $("cpl").onclick = async () => { const ok = await copyText(new URL("employee.html", location.href).href); if (ok) $("cpl").textContent = "تم النسخ ✓"; };
