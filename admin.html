@@ -487,13 +487,13 @@ function payCsv(rows) {
 }
 const dayL = (d) => new Date(d + "T12:00:00").toLocaleDateString("ar-EG-u-nu-latn", { weekday: "long", day: "numeric", month: "numeric" });
 const fmtMin = (m) => (m >= 60 ? Math.floor(m / 60) + " س" + (m % 60 ? " و" + (m % 60) + " د" : "") : m + " د");
-function payslipHtml(e, r, det, adj, advs, ses, advAll) {
+function slipModel(e, r, det, adj, advs, ses, advAll) {
   const inf = (det && det.info) || null, its = (det && det.items) || [];
   const mon = String(st.month).slice(0, 7), dim = inf ? inf.days_in_month : new Date(Number(mon.slice(0, 4)), Number(mon.slice(5, 7)), 0).getDate();
   const wd = (iso) => new Date(iso + "T12:00:00").toLocaleDateString("ar-EG-u-nu-latn", { weekday: "long" });
   const byDay = {}; its.forEach((i) => (byDay[i.day] = byDay[i.day] || []).push(i));
   const sesDay = {}; (ses || []).forEach((x) => (sesDay[x.work_date] = sesDay[x.work_date] || []).push(x));
-  const offs = new Set((inf && inf.off_dates) || []), cell = (v) => (v ? money(v) : "");
+  const offs = new Set((inf && inf.off_dates) || []);
   let tDed = 0, tAdd = 0; const rows = [];
   for (let d = 1; d <= dim; d++) {
     const iso = `${mon}-${String(d).padStart(2, "0")}`, ss = sesDay[iso] || [], it = byDay[iso] || [];
@@ -516,27 +516,96 @@ function payslipHtml(e, r, det, adj, advs, ses, advAll) {
       cls = ded > 0 ? "bad" : add > 0 ? "good" : "";
     }
     tDed += ded; tAdd += add;
-    rows.push(`<tr class="${cls}"><td class="dy">${d} ${wd(iso)}</td><td>${tin}</td><td>${tout}</td><td class="nt2">${esc(note)}</td><td>${cell(ded)}</td><td>${cell(add)}</td></tr>`);
+    rows.push({ day: d + " " + wd(iso), tin, tout, note, ded, add, cls });
   }
-  const ad = (k) => (adj || []).filter((x) => x.kind === k);
-  const oth = [];
-  const O = (t, ded, add) => oth.push(`<tr><td colspan="3" class="nt2">${t}</td><td>${cell(ded)}</td><td>${cell(add)}</td></tr>`);
-  ad("bonus").forEach((x) => O("مكافأة" + (x.reason ? " — " + esc(x.reason) : ""), 0, x.amount));
-  ad("deduction").forEach((x) => O("خصم" + (x.reason ? " — " + esc(x.reason) : ""), x.amount, 0));
-  ad("penalty").forEach((x) => O("جزاء" + (x.reason ? " — " + esc(x.reason) : ""), x.amount, 0));
-  (advs || []).forEach((x) => O("سلفة", x.amount, 0));
-  if (Number(r.insurance)) O("تأمينات", r.insurance, 0);
-  if (Number(r.income_tax)) O("ضريبة دخل", r.income_tax, 0);
-  const t = payTotals(r), extra = t.extra, ded = t.ded + Number(r.advances_deducted || 0);
-  const pend = (advAll || []).filter((x) => x.status === "pending" || String(x.repay_month).slice(0, 7) !== mon).map((x) => `سلفة ${money(x.amount)} ${x.status === "pending" ? "بانتظار الموافقة (غير محسوبة)" : "على شهر " + String(x.repay_month).slice(0, 7)}`);
+  const ad = (k) => (adj || []).filter((x) => x.kind === k), oth = [];
+  ad("bonus").forEach((x) => oth.push({ t: "مكافأة" + (x.reason ? " — " + x.reason : ""), ded: 0, add: x.amount }));
+  ad("deduction").forEach((x) => oth.push({ t: "خصم" + (x.reason ? " — " + x.reason : ""), ded: x.amount, add: 0 }));
+  ad("penalty").forEach((x) => oth.push({ t: "جزاء" + (x.reason ? " — " + x.reason : ""), ded: x.amount, add: 0 }));
+  (advs || []).forEach((x) => oth.push({ t: "سلفة", ded: x.amount, add: 0 }));
+  if (Number(r.insurance)) oth.push({ t: "تأمينات", ded: r.insurance, add: 0 });
+  if (Number(r.income_tax)) oth.push({ t: "ضريبة دخل", ded: r.income_tax, add: 0 });
+  const t = payTotals(r);
+  const notes = (advAll || []).filter((x) => x.status === "pending" || String(x.repay_month).slice(0, 7) !== mon).map((x) => `سلفة ${money(x.amount)} ${x.status === "pending" ? "بانتظار الموافقة (غير محسوبة)" : "على شهر " + String(x.repay_month).slice(0, 7)}`);
+  if (inf && inf.overtime_raw_minutes !== inf.overtime_paid_minutes) notes.push(`الإضافي بعد التقريب: ${fmtMin(inf.overtime_paid_minutes)} من ${fmtMin(inf.overtime_raw_minutes)}`);
   const asOf = inf && new Date(inf.as_of) < new Date(mon + "-" + String(dim).padStart(2, "0")) ? ` · محسوب لحد ${inf.as_of.slice(8)}/${inf.as_of.slice(5, 7)}` : "";
-  return `<div class="ps"><h2>${esc(st.co.name)}</h2><div class="sub">قسيمة مرتب · ${monthLabel(st.month)}${asOf}</div><h3>${esc(e.full_name)}${e.job_title ? " · " + esc(e.job_title) : ""}</h3>
-   <div class="strip"><div><span>الأساسي</span><b>${money(r.base_pay)}</b></div><div><span>إضافات</span><b>${money(extra)}</b></div><div class="r"><span>خصومات</span><b>${money(t.ded)}</b></div><div class="r"><span>سلف</span><b>${money(r.advances_deducted)}</b></div><div class="net"><span>الصافي</span><b>${money(r.net_pay)}</b></div></div>
-   <table class="cal"><tr><th>اليوم</th><th>حضور</th><th>انصراف</th><th>ملاحظات</th><th>خصم</th><th>إضافة</th></tr>${rows.join("")}<tr class="tt"><td colspan="4">إجمالي الأيام</td><td>${cell(Math.round(tDed))}</td><td>${cell(Math.round(tAdd))}</td></tr></table>
-   ${oth.length ? `<table class="cal" style="margin-top:12px"><tr><th colspan="3">بنود أخرى</th><th>خصم</th><th>إضافة</th></tr>${oth.join("")}</table>` : ""}
-   ${pend.length ? `<div class="nt">${pend.map((x) => "• " + x).join("<br>")}</div>` : ""}
-   ${inf && inf.overtime_raw_minutes !== inf.overtime_paid_minutes ? `<div class="nt">• الإضافي بعد التقريب: ${fmtMin(inf.overtime_paid_minutes)} من ${fmtMin(inf.overtime_raw_minutes)}</div>` : ""}
+  return { co: st.co.name, sub: "قسيمة مرتب · " + monthLabel(st.month) + asOf, who: e.full_name + (e.job_title ? " · " + e.job_title : ""),
+    strip: [["الأساسي", r.base_pay, ""], ["إضافات", t.extra, ""], ["خصومات", t.ded, "r"], ["سلف", r.advances_deducted, "r"], ["الصافي", r.net_pay, "net"]],
+    rows, tDed: Math.round(tDed), tAdd: Math.round(tAdd), oth, notes };
+}
+function payslipHtml(e, r, det, adj, advs, ses, advAll) {
+  const m = slipModel(e, r, det, adj, advs, ses, advAll), cell = (v) => (Number(v) ? money(v) : "");
+  return `<div class="ps"><h2>${esc(m.co)}</h2><div class="sub">${esc(m.sub)}</div><h3>${esc(m.who)}</h3>
+   <div class="strip">${m.strip.map(([l, v, c]) => `<div class="${c}"><span>${l}</span><b>${money(v)}</b></div>`).join("")}</div>
+   <table class="cal"><tr><th>اليوم</th><th>حضور</th><th>انصراف</th><th>ملاحظات</th><th>خصم</th><th>إضافة</th></tr>${m.rows.map((x) => `<tr class="${x.cls}"><td class="dy">${x.day}</td><td>${x.tin}</td><td>${x.tout}</td><td class="nt2">${esc(x.note)}</td><td>${cell(x.ded)}</td><td>${cell(x.add)}</td></tr>`).join("")}<tr class="tt"><td colspan="4">إجمالي الأيام</td><td>${cell(m.tDed)}</td><td>${cell(m.tAdd)}</td></tr></table>
+   ${m.oth.length ? `<table class="cal" style="margin-top:12px"><tr><th colspan="3">بنود أخرى</th><th>خصم</th><th>إضافة</th></tr>${m.oth.map((x) => `<tr><td colspan="3" class="nt2">${esc(x.t)}</td><td>${cell(x.ded)}</td><td>${cell(x.add)}</td></tr>`).join("")}</table>` : ""}
+   ${m.notes.length ? `<div class="nt">${m.notes.map((x) => "• " + esc(x)).join("<br>")}</div>` : ""}
    <div class="sig">توقيع الموظف: ____________________</div></div>`;
+}
+/* ---- PDF (drawn on a canvas, wrapped in a minimal PDF; no libraries) ---- */
+function slipCanvas(m) {
+  const W = 794, PAD = 36, K = 2, F = "'IBM Plex Sans Arabic', Tahoma, Arial, sans-serif", RH = 22, nRows = m.rows.length;
+  const H = Math.max(1123, 330 + (nRows + 2) * RH + (m.oth.length ? (m.oth.length + 2) * RH + 20 : 0) + m.notes.length * 20 + 120);
+  const cv = document.createElement("canvas"); cv.width = W * K; cv.height = H * K; const c = cv.getContext("2d"); c.scale(K, K); c.direction = "rtl";
+  const T = (t, x, y, o = {}) => { c.font = `${o.b ? "700" : "400"} ${o.s || 12}px ${F}`; c.fillStyle = o.c || "#1F1B17"; c.textAlign = o.a || "right"; c.textBaseline = "middle"; c.fillText(String(t), x, y); };
+  c.fillStyle = "#fff"; c.fillRect(0, 0, W, H);
+  const R = W - PAD; let y = 44;
+  T(m.co, R, y, { b: 1, s: 24 }); y += 28; T(m.sub, R, y, { s: 13, c: "#7B7167" }); y += 32; T(m.who, R, y, { b: 1, s: 18 }); y += 26;
+  const bw = (W - 2 * PAD) / 5, by = y;
+  m.strip.forEach(([l, v, k], i) => { const x = R - bw * (i + 1);
+    c.fillStyle = k === "net" ? "#1F1B17" : "#fff"; c.fillRect(x, by, bw, 54); c.strokeStyle = "#bdb4a6"; c.lineWidth = 1; c.strokeRect(x, by, bw, 54);
+    T(l, x + bw / 2, by + 17, { a: "center", s: 12, c: k === "net" ? "#ddd" : "#7B7167" }); T(money(v), x + bw / 2, by + 38, { a: "center", b: 1, s: 17, c: k === "net" ? "#fff" : k === "r" ? "#B3382C" : "#1F1B17" }); });
+  y = by + 54 + 18;
+  const cols = [92, 62, 62, 0, 62, 62]; cols[3] = W - 2 * PAD - cols.reduce((a, b) => a + b, 0);
+  const grid = (ytop, h, fill, cells, o = {}) => { let x = R; if (fill) { c.fillStyle = fill; c.fillRect(PAD, ytop, W - 2 * PAD, h); }
+    cells.forEach((t, i) => { const w = cols[i]; c.strokeStyle = o.line || "#d9d2c7"; c.lineWidth = 1; c.strokeRect(x - w, ytop, w, h);
+      if (t !== "") T(t, i === 0 || i === 3 ? x - 6 : x - w / 2, ytop + h / 2 + 1, { a: i === 0 || i === 3 ? "right" : "center", s: o.s || 11.5, b: o.b || (i >= 4 && t !== ""), c: o.col ? o.col(i) : "#1F1B17" }); x -= w; }); };
+  grid(y, 26, "#1F1B17", ["اليوم", "حضور", "انصراف", "ملاحظات", "خصم", "إضافة"], { line: "#1F1B17", b: 1, col: () => "#fff", s: 12 }); y += 26;
+  const fc = (v) => (Number(v) ? money(v) : "");
+  m.rows.forEach((x) => { grid(y, RH, x.cls === "mu" ? "#f6f3ee" : x.cls === "bad" ? "#fdf1ef" : null, [x.day, x.tin, x.tout, x.note, fc(x.ded), fc(x.add)], { col: (i) => (x.cls === "mu" ? "#a39a8d" : i === 4 ? "#B3382C" : i === 5 ? "#2f7d4f" : "#1F1B17") }); y += RH; });
+  grid(y, RH + 2, "#efeae1", ["إجمالي الأيام", "", "", "", fc(m.tDed), fc(m.tAdd)], { b: 1 }); y += RH + 2 + 18;
+  if (m.oth.length) {
+    const o = { line: "#d9d2c7" }; const g2 = (ytop, fill, a, b, d, bold, col) => { c.fillStyle = fill || "#fff"; c.fillRect(PAD, ytop, W - 2 * PAD, RH, fill ? 1 : 0); let x = R; const w3 = cols[0] + cols[1] + cols[2] + cols[3];
+      [[w3, a, "right"], [cols[4], b, "center"], [cols[5], d, "center"]].forEach(([w, t, al]) => { c.strokeStyle = bold ? "#1F1B17" : "#d9d2c7"; c.strokeRect(x - w, ytop, w, RH); if (t !== "") T(t, al === "right" ? x - 6 : x - w / 2, ytop + RH / 2 + 1, { a: al, b: bold, c: col || "#1F1B17", s: 11.5 }); x -= w; }); };
+    g2(y, "#1F1B17", "بنود أخرى", "خصم", "إضافة", 1, "#fff"); y += RH;
+    m.oth.forEach((x) => { g2(y, null, x.t, fc(x.ded), fc(x.add)); y += RH; }); y += 16;
+  }
+  m.notes.forEach((t) => { T("• " + t, R, y, { s: 11.5, c: "#7B7167" }); y += 20; });
+  y += 30; T("توقيع الموظف: ____________________", R, y, { s: 13, c: "#7B7167" });
+  return { cv, W, H };
+}
+function pdfFromCanvas(cv, W, H) {
+  const jpg = Uint8Array.from(atob(cv.toDataURL("image/jpeg", 0.92).split(",")[1]), (ch) => ch.charCodeAt(0)), te = new TextEncoder(), parts = [], offs = [];
+  let pos = 0; const put = (b) => { const u = typeof b === "string" ? te.encode(b) : b; parts.push(u); pos += u.length; };
+  const hpt = Math.round((595 * H) / W * 100) / 100;
+  put("%PDF-1.4\n"); const obj = (n, body) => { offs[n] = pos; put(`${n} 0 obj\n`); put(body); put("\nendobj\n"); };
+  obj(1, "<< /Type /Catalog /Pages 2 0 R >>"); obj(2, "<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+  obj(3, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 ${hpt}] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>`);
+  offs[4] = pos; put(`4 0 obj\n<< /Type /XObject /Subtype /Image /Width ${cv.width} /Height ${cv.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpg.length} >>\nstream\n`); put(jpg); put("\nendstream\nendobj\n");
+  const cs = `q 595 0 0 ${hpt} 0 0 cm /Im0 Do Q`; obj(5, `<< /Length ${cs.length} >>\nstream\n${cs}\nendstream`);
+  const xr = pos; put("xref\n0 6\n0000000000 65535 f \n"); for (let i = 1; i <= 5; i++) put(String(offs[i]).padStart(10, "0") + " 00000 n \n");
+  put(`trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xr}\n%%EOF`);
+  const out = new Uint8Array(pos); let p2 = 0; parts.forEach((u) => { out.set(u, p2); p2 += u.length; }); return new Blob([out], { type: "application/pdf" });
+}
+async function slipPdf(m, name) {
+  try { await document.fonts.load("700 14px 'IBM Plex Sans Arabic'"); await document.fonts.load("400 14px 'IBM Plex Sans Arabic'"); } catch {}
+  const { cv, W, H } = slipCanvas(m); return new File([pdfFromCanvas(cv, W, H)], name, { type: "application/pdf" });
+}
+const waNum = (ph) => { let d = String(ph || "").replace(/\D/g, ""); if (!d) return ""; if (d.startsWith("00")) d = d.slice(2); else if (d.startsWith("0")) d = "20" + d.slice(1); else if (d.length <= 10 && !d.startsWith("20")) d = "20" + d; return d; };
+async function sendSlip(e, m, r, btn) {
+  const num = waNum(e.phone); if (!num) return alert("مفيش رقم موبايل للموظف ده. ضيفه من صفحته في تبويب الموظفون.");
+  const mon = String(st.month).slice(0, 7), label = btn.textContent; btn.disabled = true; btn.textContent = "جاري التجهيز…";
+  try {
+    const file = await slipPdf(m, `مرتب-${e.full_name}-${mon}.pdf`), text = `قسيمة مرتب ${monthLabel(st.month)} — ${e.full_name}\nالصافي: ${money(r.net_pay)} ج.م`;
+    const mobile = /iPhone|iPad|Android/i.test(navigator.userAgent);
+    if (mobile && navigator.canShare && navigator.canShare({ files: [file] })) { try { await navigator.share({ files: [file], text }); } catch (x) { if (x && x.name !== "AbortError") throw x; } }
+    else {
+      const a = document.createElement("a"); a.href = URL.createObjectURL(file); a.download = file.name; document.body.appendChild(a); a.click(); a.remove();
+      window.open("https://wa.me/" + num + "?text=" + encodeURIComponent(text), "_blank");
+      alert("اتحمّل ملف الـ PDF، وفتحنا شات الموظف على واتساب. اسحب الملف أو ارفقه في الشات وابعته.");
+    }
+  } catch (x) { alert("حصلت مشكلة في تجهيز الملف: " + (x && x.message ? x.message : x)); }
+  btn.disabled = false; btn.textContent = label;
 }
 const nextM = (m) => { const [y, mo] = m.split('-').map(Number); return mo === 12 ? `${y + 1}-01-01` : `${y}-${String(mo + 1).padStart(2, '0')}-01`; };
 async function slipSheet(e) {
@@ -551,7 +620,7 @@ async function slipSheet(e) {
       r = Array.isArray(rr) ? rr[0] : rr; det = dd; adj = aa; advs = vv; ses = ss_; advAll = av2;
     } catch (x) { o.innerHTML = `<div class="sheet"><button type="button" class="xclose" aria-label="إغلاق">✕</button><div class="err">${esc(arabicErr(x))}</div></div>`; return; }
     o.innerHTML = `<div class="sheet"><button type="button" class="xclose" aria-label="إغلاق">✕</button>${payslipHtml(e, r, det, adj, advs, ses, advAll)}
-      <div class="btns"><button class="btn p sm" id="ps">طباعة القسيمة</button></div>
+      <div class="btns"><button class="btn p sm" id="wa">إرسال واتساب</button><button class="btn sm" id="pd">تنزيل PDF</button><button class="btn sm" id="ps">طباعة</button></div>
       <details class="adv"><summary>إضافة مكافأة أو خصم أو جزاء أو سلفة</summary>
         <label class="f">النوع<select id="ak"><option value="bonus">مكافأة</option><option value="deduction">خصم</option><option value="penalty">جزاء</option><option value="advance">سلفة (تتخصم من الشهر ده)</option></select></label>
         <div class="g2k"><label class="f">المبلغ<input id="aa" type="number" inputmode="decimal"></label><label class="f">السبب<input id="ar"></label></div>
@@ -560,6 +629,8 @@ async function slipSheet(e) {
       </details></div>`;
     const q = (id) => o.querySelector(id), er = (t) => (q("#ae").textContent = t);
     q("#ps").onclick = () => printHtml(payslipHtml(e, r, det, adj, advs, ses, advAll));
+    q("#wa").onclick = () => sendSlip(e, slipModel(e, r, det, adj, advs, ses, advAll), r, q("#wa"));
+    q("#pd").onclick = async () => { const f = await slipPdf(slipModel(e, r, det, adj, advs, ses, advAll), `مرتب-${e.full_name}-${String(st.month).slice(0, 7)}.pdf`); const a = document.createElement("a"); a.href = URL.createObjectURL(f); a.download = f.name; document.body.appendChild(a); a.click(); a.remove(); };
     q("#aadd").onclick = async () => {
       const k = q("#ak").value, amt = Number(q("#aa").value); if (!(amt > 0)) return er("اكتب المبلغ");
       try {
