@@ -6,9 +6,9 @@
 <meta name="theme-color" content="#F7F4EF">
 <link rel="manifest" href="employee.webmanifest">
 <link rel="apple-touch-icon" href="icon-180.png">
-<link rel="icon" href="icon-192.png">
+<link rel="icon" href="admin-icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Mogzy">
+<meta name="apple-mobile-web-app-title" content="Mogzy الإدارة">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
 <title>Mogzy · الموظف</title>
@@ -29,6 +29,13 @@ h2{font-size:18px;font-weight:600;margin:0 0 10px}
 .sub{color:var(--mute);font-size:15px;line-height:1.7}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:22px;padding:18px 20px;margin:14px 0;box-shadow:var(--shadow)}
 .shot{width:48px;height:48px;border-radius:12px;background:var(--line) center/cover;flex:none;display:grid;place-items:center;color:var(--mute);cursor:pointer}
+.dchips{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 14px}.dc{height:40px;padding:0 14px;border-radius:12px;border:1px solid var(--btn);background:var(--surface);color:var(--ink);font-size:15px;font-weight:500}.dc.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+.g2k{display:grid;grid-template-columns:1fr 1fr;gap:10px}.sheet .g2k input{padding:0 8px;font-size:16px}@media(max-width:640px){.at th,.at td{display:table-cell!important}.at td{padding:10px 4px}}
+.btns{display:flex;gap:10px;margin:0 0 12px}.sheet .btns{margin:22px 0 0}.clk{cursor:pointer}.clk:active{background:var(--soft)}
+.ov{position:fixed;inset:0;background:rgba(31,27,23,.55);display:grid;place-items:center;z-index:90;padding:16px}.sheet{background:var(--surface);border-radius:20px;padding:20px;max-width:420px;width:100%;max-height:90vh;overflow:auto}
+.ps h2{margin:0}.ps h3{margin:14px 0 8px;font-size:17px}.ps table{width:100%}.ps td{padding:6px 0;border-bottom:1px solid var(--line)}.ps tr.d td:first-child{color:var(--red)}.ps tr.tot td{font-weight:700;border-bottom:0;font-size:18px}.sig{margin-top:28px;color:var(--mute);font-size:14px}
+#pa{display:none}
+@media print{body.printing>*:not(#pa){display:none!important}body.printing #pa{display:block;padding:16px;color:#000;background:#fff}#pa table{width:100%;border-collapse:collapse}#pa th,#pa td{border:1px solid #bbb;padding:6px 8px;text-align:right}#pa td.n{text-align:left}#pa td.sg{width:90px}#pa .ps td{border:0;border-bottom:1px solid #ddd}}
 .row{display:flex;align-items:center;gap:12px;min-height:60px;border-bottom:1px solid var(--line)}
 .row:last-child{border:none}.row .grow{flex:1;min-width:0}
 .row b{font-weight:600}.row small{color:var(--mute);font-size:14px;display:block;line-height:1.6}
@@ -223,7 +230,7 @@ async function loadAdmin() {
   const today0 = new Date(); today0.setHours(0, 0, 0, 0);
   const [co, set, emps, ses, adv, lv, links, evs] = await Promise.all([
     db("companies?select=id,name,code&limit=1"), db("company_settings?select=*&limit=1"),
-    db("employees?select=id,full_name,job_title,phone,monthly_salary,shift_start,shift_end,active,user_id&order=full_name"),
+    db("employees?select=id,full_name,job_title,phone,monthly_salary,shift_start,shift_end,active,user_id,free_absence_days,weekly_off_days&order=full_name"),
     db("attendance_sessions?select=employee_id,check_in,check_out&or=(check_out.is.null,check_in.gte." + today0.toISOString() + ")"),
     db("advances?select=*&status=eq.pending&order=created_at"), db("leave_requests?select=*&status=eq.pending&order=created_at"),
     db("employee_link_requests?select=*&status=eq.pending").catch(() => []),
@@ -253,7 +260,30 @@ function tabToday() {
   const act = st.emps.filter((e) => e.active), rows = act.map((e) => ({ e, s: statusOf(e) }));
   const inN = rows.filter((r) => r.s.k === "in").length, ab = rows.filter((r) => r.s.k === "absent").length;
   $("body").innerHTML = `<h1>اليوم</h1><div class="stats"><div class="stat"><span>داخل الآن</span><div>${inN}</div></div><div class="stat"><span>لم يحضر</span><div>${ab}</div></div><div class="stat"><span>تنتظر موافقتك</span><div>${st.adv.length + st.lv.length}</div></div></div>
-   <div class="card">${rows.length ? rows.map(({ e, s }) => `<div class="row"><div class="grow"><b>${esc(e.full_name)}</b><small>${esc(s.sub)}</small></div>${s.chip}</div>`).join("") : '<div class="sub">لا يوجد موظفون بعد. أضفهم من تبويب الموظفون.</div>'}</div>`;
+   <div class="card">${rows.length ? rows.map(({ e, s }) => `<div class="row"><div class="grow"><b>${esc(e.full_name)}</b><small>${esc(s.sub)}</small></div>${s.chip}<button class="btn sm" data-w="${e.id}">إعفاء</button></div>`).join("") : '<div class="sub">لا يوجد موظفون بعد. أضفهم من تبويب الموظفون.</div>'}</div>`;
+  document.querySelectorAll("[data-w]").forEach((b) => (b.onclick = () => waiveSheet(b.dataset.w)));
+}
+const WK = { absence: "غياب", late: "تأخير", early: "انصراف مبكر" };
+async function waiveSheet(eid) {
+  const e = st.emps.find((x) => x.id === eid), o = document.createElement("div"), today = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  o.className = "ov"; document.body.appendChild(o);
+  const draw = async () => {
+    let list = []; try { list = await db(`day_waivers?select=work_date,kind&employee_id=eq.${eid}&order=work_date.desc&limit=10`); } catch {}
+    o.innerHTML = `<div class="sheet"><h2>إعفاء · ${esc(e.full_name)}</h2><div class="sub">اليوم المعفى مش بيتخصم منه حاجة في المرتب.</div>
+      <label class="f">اليوم<input id="wd" type="date" value="${today}" max="${today}"></label>
+      <label class="f">إعفاء من<select id="wk"><option value="absence">الغياب</option><option value="late">التأخير</option><option value="early">الانصراف المبكر</option></select></label>
+      <div id="we" class="err"></div>
+      <div class="btns"><button class="btn p sm" id="wo">إعفاء</button><button class="btn sm" id="wc">إغلاق</button></div>
+      ${list.length ? `<h3 style="margin:18px 0 4px;font-size:15px">آخر الإعفاءات</h3>${list.map((w, i) => `<div class="row" style="min-height:48px"><div class="grow">${esc(w.work_date)} · ${WK[w.kind] || w.kind}</div><button class="btn sm" data-r="${i}">إلغاء</button></div>`).join("")}` : ""}</div>`;
+    o.querySelector("#wc").onclick = () => o.remove();
+    o.querySelector("#wo").onclick = async () => {
+      const d = o.querySelector("#wd").value; if (!d) return;
+      try { await db("day_waivers", { method: "POST", prefer: "resolution=ignore-duplicates,return=minimal", body: { company_id: st.co.id, employee_id: eid, work_date: d, kind: o.querySelector("#wk").value, waived_by: S.user.id } }); await draw(); }
+      catch (x) { o.querySelector("#we").textContent = arabicErr(x); }
+    };
+    o.querySelectorAll("[data-r]").forEach((b) => (b.onclick = async () => { const w = list[Number(b.dataset.r)]; try { await db(`day_waivers?employee_id=eq.${eid}&work_date=eq.${w.work_date}&kind=eq.${w.kind}`, { method: "DELETE" }); await draw(); } catch (x) { o.querySelector("#we").textContent = arabicErr(x); } }));
+  };
+  draw();
 }
 async function loadShots() {
   const t = await tok();
@@ -293,28 +323,189 @@ function tabEmp() {
     <div class="grid2"><label class="f">يبدأ الشغل<input id="ef" type="time" value="09:00"></label><label class="f">ينتهي<input id="et" type="time" value="17:00"></label></div>
     <div class="sub" id="eh">لو الوقت يعدّي منتصف الليل (مثل 18:00 إلى 02:00) يتحسب تلقائياً.</div>
     <div id="err" class="err"></div><button class="btn p full" id="ea">إضافة</button></div>
-   <div class="card">${st.emps.map((e) => `<div class="row"><div class="grow"><b>${esc(e.full_name)}</b><small>${esc(e.job_title || "")} ${e.shift_start.slice(0, 5)} → ${e.shift_end.slice(0, 5)} · ${money(e.monthly_salary)} ج.م</small></div><span class="chip ${e.user_id ? "c-green" : "c-gray"}">${e.user_id ? "ربط الموبايل" : "من الجهاز فقط"}</span></div>`).join("") || '<div class="sub">لا يوجد موظفون.</div>'}</div>`;
+   <div class="card">${st.emps.map((e) => `<div class="row clk" data-e="${e.id}"><div class="grow"><b>${esc(e.full_name)}</b><small>${esc(e.job_title || "")} ${e.shift_start.slice(0, 5)} → ${e.shift_end.slice(0, 5)} · ${money(e.monthly_salary)} ج.م</small></div>${e.active ? "" : '<span class="chip c-amber">موقوف</span>'}<span class="chip ${e.user_id ? "c-green" : "c-gray"}">${e.user_id ? "ربط الموبايل" : "من الجهاز فقط"}</span></div>`).join("") || '<div class="sub">لا يوجد موظفون.</div>'}<div class="sub" style="margin-top:8px">اضغط على الموظف لتعديله أو لعرض سجل حضوره.</div></div>`;
+  document.querySelectorAll("[data-e]").forEach((r) => (r.onclick = () => empSheet(st.emps.find((x) => x.id === r.dataset.e))));
   $("ea").onclick = async () => {
     setErr("");
     if (!val("en") || !(Number(val("es")) >= 0) || !val("es")) return setErr("اكتب الاسم والمرتب");
     try { await db("employees", { method: "POST", body: { company_id: st.co.id, full_name: val("en"), job_title: val("ej") || null, phone: val("ep") || null, monthly_salary: Number(val("es")), shift_start: val("ef"), shift_end: val("et") } }); await loadAdmin(); } catch (e) { setErr(arabicErr(e)); }
   };
 }
+
+const DAYS = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
+function overlay() { const o = document.createElement("div"); o.className = "ov"; document.body.appendChild(o); return o; }
+function empSheet(e) {
+  const o = overlay();
+  o.innerHTML = `<div class="sheet"><h2>${esc(e.full_name)}</h2>
+    <label class="f">الاسم<input id="xn" value="${esc(e.full_name)}"></label>
+    <div class="grid2"><label class="f">الوظيفة<input id="xj" value="${esc(e.job_title || "")}"></label><label class="f">الموبايل<input id="xp" type="tel" dir="ltr" value="${esc(e.phone || "")}"></label></div>
+    <label class="f">المرتب الشهري (ج.م)<input id="xs" type="number" inputmode="decimal" value="${Number(e.monthly_salary)}"></label>
+    <div class="grid2"><label class="f">يبدأ الشغل<input id="xf" type="time" value="${e.shift_start.slice(0, 5)}"></label><label class="f">ينتهي<input id="xt" type="time" value="${e.shift_end.slice(0, 5)}"></label></div>
+    <label class="f">أيام غياب مسموحة في الشهر (فاضي = زي إعدادات الشركة)<input id="xg" type="number" inputmode="decimal" value="${e.free_absence_days ?? ""}"></label>
+    <label class="row" style="cursor:pointer"><div class="grow"><b>إجازة أسبوعية خاصة بالموظف</b><small>لو مقفولة بياخد إجازة الشركة</small></div><input type="checkbox" id="xo" ${e.weekly_off_days ? "checked" : ""}></label>
+    <div class="dchips" id="xw" style="${e.weekly_off_days ? "" : "display:none"}">${DAYS.map((d, i) => `<button type="button" class="dc ${(e.weekly_off_days || []).includes(i) ? "on" : ""}" data-day="${i}">${d}</button>`).join("")}</div>
+    <div id="xe" class="err"></div>
+    <div class="btns"><button class="btn p sm" id="xv">حفظ</button><button class="btn sm" id="xa">سجل الحضور</button><button class="btn sm" id="xc">إغلاق</button></div>
+    <div class="btns" style="margin-top:18px"><button class="btn sm" id="xk">${e.active ? "إيقاف الموظف" : "تفعيل الموظف"}</button><button class="btn sm" id="xd" style="color:var(--red)">حذف نهائي</button></div>
+    <div class="sub">الإيقاف بيخفي الموظف من الكشك والمرتبات ويحتفظ بسجله. الحذف بيمسح كل بياناته.</div></div>`;
+  const q = (id) => o.querySelector(id), er = (m) => (q("#xe").textContent = m), fail = (x) => er(arabicErr(x));
+  q("#xc").onclick = () => o.remove();
+  q("#xo").onchange = () => (q("#xw").style.display = q("#xo").checked ? "" : "none");
+  o.querySelectorAll("#xw .dc").forEach((b) => (b.onclick = () => b.classList.toggle("on")));
+  q("#xa").onclick = () => { o.remove(); attSheet(e); };
+  q("#xv").onclick = async () => {
+    const n = q("#xn").value.trim(), sal = q("#xs").value;
+    if (!n || sal === "" || !(Number(sal) >= 0)) return er("اكتب الاسم والمرتب");
+    try { await db(`employees?id=eq.${e.id}`, { method: "PATCH", body: { full_name: n, job_title: q("#xj").value.trim() || null, phone: q("#xp").value.trim() || null, monthly_salary: Number(sal), shift_start: q("#xf").value, shift_end: q("#xt").value, free_absence_days: q("#xg").value === "" ? null : Number(q("#xg").value), weekly_off_days: q("#xo").checked ? [...o.querySelectorAll("#xw .dc.on")].map((b) => Number(b.dataset.day)) : null } }); o.remove(); await loadAdmin(); } catch (x) { fail(x); }
+  };
+  q("#xk").onclick = async () => {
+    if (e.active && !confirm("إيقاف " + e.full_name + "؟ مش هيظهر في الكشك ولا في المرتبات.")) return;
+    try { await db(`employees?id=eq.${e.id}`, { method: "PATCH", body: { active: !e.active } }); o.remove(); await loadAdmin(); } catch (x) { fail(x); }
+  };
+  q("#xd").onclick = async () => {
+    if (!confirm("حذف " + e.full_name + " نهائياً مع كل حضوره وسلفه؟ لا يمكن التراجع.\nلو عايز تحتفظ بالسجل استخدم إيقاف الموظف بدل الحذف.")) return;
+    try { await db(`employees?id=eq.${e.id}`, { method: "DELETE" }); o.remove(); await loadAdmin(); } catch (x) { fail(x); }
+  };
+}
+const p2 = (n) => String(n).padStart(2, "0");
+const hmVal = (iso) => { const d = new Date(iso); return p2(d.getHours()) + ":" + p2(d.getMinutes()); };
+const dayAr = (d) => new Date(d + "T12:00:00").toLocaleDateString("ar-EG-u-nu-latn", { weekday: "short", day: "numeric", month: "numeric" });
+async function attSheet(e, mon) {
+  mon = mon || st.month.slice(0, 7);
+  const o = overlay(), [y, m] = mon.split("-").map(Number), nxt = m === 12 ? `${y + 1}-01-01` : `${y}-${p2(m + 1)}-01`;
+  let list = [], pay = null, editId = null; const today = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  const draw = async () => {
+    try { list = await db(`attendance_sessions?select=id,work_date,check_in,check_out&employee_id=eq.${e.id}&work_date=gte.${mon}-01&work_date=lt.${nxt}&order=work_date.asc,check_in.asc`); } catch (x) { list = []; }
+    try { const r = await rpc("payroll_month", { p_employee: e.id, p_month: mon + "-01" }); pay = Array.isArray(r) ? r[0] : r; } catch { pay = null; }
+    const [sh, sm] = e.shift_start.split(":").map(Number), grace = (st.set && st.set.late_grace_minutes) || 0;
+    const isLate = (s) => { const c = new Date(s.check_in); return c.getHours() * 60 + c.getMinutes() - (sh * 60 + sm) > grace; };
+    const hrs = (s) => (s.check_out ? (new Date(s.check_out) - new Date(s.check_in)) / 36e5 : 0);
+    const days = new Set(list.map((s) => s.work_date)).size, lates = list.filter(isLate).length, tot = list.reduce((a, s) => a + hrs(s), 0);
+    const ed = editId && list.find((s) => s.id === editId);
+    o.innerHTML = `<div class="sheet"><h2>سجل حضور · ${esc(e.full_name)}</h2>
+      <label class="f">الشهر<input id="am" type="month" value="${mon}"></label>
+      <div class="stats"><div class="stat"><span>أيام حضور</span><div>${days}</div></div><div class="stat"><span>مرات تأخير</span><div>${lates}</div></div><div class="stat"><span>ساعات</span><div>${tot.toFixed(1)}</div></div></div>
+      ${pay ? `<div class="sub">أيام غياب محسوبة: <b>${Number(pay.absent_days || 0)}</b></div>` : ""}
+      <table class="at" style="margin-top:10px"><tr><th>اليوم</th><th>حضور</th><th>انصراف</th><th></th></tr>${list.map((s) => `<tr><td>${dayAr(s.work_date)}</td><td class="n" style="${isLate(s) ? "color:var(--red)" : ""}">${hhmm(s.check_in)}</td><td class="n">${s.check_out ? hhmm(s.check_out) : "—"}</td><td><button class="btn sm" data-ed="${s.id}">تعديل</button></td></tr>`).join("") || '<tr><td colspan="4" class="sub">لا يوجد حضور في الشهر ده.</td></tr>'}</table>
+      <h3 style="margin:18px 0 0;font-size:15px">${ed ? "تعديل بصمة" : "إضافة بصمة يدوي"}</h3>
+      <label class="f">اليوم<input id="ad" type="date" value="${ed ? ed.work_date : today}"></label>
+      <div class="g2k"><label class="f">حضور<input id="ai" type="time" value="${ed ? hmVal(ed.check_in) : e.shift_start.slice(0, 5)}"></label><label class="f">انصراف<input id="ao" type="time" value="${ed && ed.check_out ? hmVal(ed.check_out) : ""}"></label></div>
+      <div id="ae" class="err"></div>
+      <div class="btns"><button class="btn p sm" id="as">${ed ? "حفظ التعديل" : "إضافة"}</button>${ed ? '<button class="btn sm" id="ax" style="color:var(--red)">حذف البصمة</button><button class="btn sm" id="an">إلغاء</button>' : ""}</div>
+      <div class="btns"><button class="btn sm" id="ap">طباعة التقرير</button><button class="btn sm" id="ac">إغلاق</button></div></div>`;
+    const q = (id) => o.querySelector(id), er = (t) => (q("#ae").textContent = t);
+    q("#ac").onclick = () => o.remove();
+    q("#am").onchange = () => { o.remove(); attSheet(e, q("#am").value || mon); };
+    o.querySelectorAll("[data-ed]").forEach((b) => (b.onclick = () => { editId = b.dataset.ed; draw(); }));
+    if (ed) q("#an").onclick = () => { editId = null; draw(); };
+    if (ed) q("#ax").onclick = async () => { if (!confirm("حذف البصمة دي؟")) return; try { await db(`attendance_sessions?id=eq.${ed.id}`, { method: "DELETE" }); editId = null; await draw(); } catch (x) { er(arabicErr(x)); } };
+    q("#as").onclick = async () => {
+      const d = q("#ad").value, ti = q("#ai").value, to = q("#ao").value; if (!d || !ti) return er("اكتب اليوم ووقت الحضور");
+      const a = new Date(`${d}T${ti}:00`); let b = to ? new Date(`${d}T${to}:00`) : null; if (b && b <= a) b = new Date(b.getTime() + 864e5);
+      const body = { work_date: d, check_in: a.toISOString(), check_out: b ? b.toISOString() : null, closed_by: b ? "admin" : null };
+      try {
+        if (ed) await db(`attendance_sessions?id=eq.${ed.id}`, { method: "PATCH", body });
+        else await db("attendance_sessions", { method: "POST", prefer: "return=minimal", body: { ...body, company_id: st.co.id, employee_id: e.id } });
+        editId = null; await draw();
+      } catch (x) { er(/one_open_session|duplicate/i.test(x.message) ? "الموظف عنده حضور مفتوح بدون انصراف. عدّله الأول." : arabicErr(x)); }
+    };
+    q("#ap").onclick = () => printHtml(`<h2>${esc(st.co.name)}</h2><div class="sub">سجل حضور · ${esc(e.full_name)} · ${monthLabel(mon + "-01")}</div><table><tr><th>اليوم</th><th>حضور</th><th>انصراف</th><th>الساعات</th></tr>${list.map((s) => `<tr><td>${dayAr(s.work_date)}</td><td class="n">${hhmm(s.check_in)}${isLate(s) ? " (تأخير)" : ""}</td><td class="n">${s.check_out ? hhmm(s.check_out) : "—"}</td><td class="n">${s.check_out ? hrs(s).toFixed(1) : "—"}</td></tr>`).join("")}<tr><td><b>الإجمالي</b></td><td class="n">${days} يوم</td><td class="n">${lates} تأخير</td><td class="n"><b>${tot.toFixed(1)}</b></td></tr></table>`);
+  };
+  draw();
+}
+const PAYCOLS = [["base_pay", "الأساسي"], ["overtime_hours", "ساعات إضافي"], ["overtime_pay", "أجر الإضافي"], ["rest_day_pay", "أجر يوم الراحة"], ["bonuses", "مكافآت"], ["absent_days", "أيام غياب"], ["absence_deduction", "خصم الغياب"], ["late_deduction", "خصم التأخير"], ["early_leave_deduction", "خصم الانصراف المبكر"], ["deductions", "خصومات أخرى"], ["penalties_applied", "جزاءات"], ["advances_deducted", "سلف مخصومة"], ["insurance", "تأمينات"], ["income_tax", "ضريبة دخل"], ["net_pay", "الصافي"]];
+const monthLabel = (m) => new Date(m).toLocaleDateString("ar-EG-u-nu-latn", { month: "long", year: "numeric" });
+const payTotals = (r) => ({ extra: Number(r.overtime_pay) + Number(r.rest_day_pay) + Number(r.bonuses), ded: Number(r.late_deduction) + Number(r.early_leave_deduction) + Number(r.absence_deduction) + Number(r.deductions) + Number(r.penalties_applied) + Number(r.insurance) + Number(r.income_tax) });
+function printHtml(html) {
+  let p = document.getElementById("pa"); if (!p) { p = document.createElement("div"); p.id = "pa"; document.body.appendChild(p); }
+  p.innerHTML = html; document.body.classList.add("printing");
+  const done = () => { document.body.classList.remove("printing"); window.removeEventListener("afterprint", done); };
+  window.addEventListener("afterprint", done); window.print();
+}
+function xlsxBuild(sheetName, title, sub, heads, rows, tot, note) {
+  const te = new TextEncoder(), X = (s) => String(s ?? "").replace(/[&<>"\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c] || ""));
+  const col = (i) => String.fromCharCode(65 + i), nc = heads.length, last = col(nc - 1);
+  const S = (r, c, t, s) => `<c r="${col(c)}${r}" s="${s}" t="inlineStr"><is><t>${X(t)}</t></is></c>`;
+  const N = (r, c, v, s, f) => `<c r="${col(c)}${r}" s="${s}">${f ? `<f>${f}</f>` : ""}<v>${Number(v) || 0}</v></c>`;
+  let x = `<row r="1" ht="26" customHeight="1">${S(1, 0, title, 1)}</row><row r="2">${S(2, 0, sub, 2)}</row><row r="4" ht="34" customHeight="1">${heads.map((h, i) => S(4, i, h, 3)).join("")}</row>`;
+  rows.forEach((row, n) => { const r = 5 + n; x += `<row r="${r}">${S(r, 0, row[0], 4)}${row.slice(1).map((v, i) => N(r, i + 1, v, i + 1 === nc - 1 ? 7 : (heads.hrs || []).includes(i + 1) ? 6 : 5)).join("")}</row>`; });
+  const rt = 5 + rows.length;
+  x += `<row r="${rt}">${S(rt, 0, "الإجمالي", 8)}${tot.map((v, i) => N(rt, i + 1, v, (heads.hrs || []).includes(i + 1) ? 10 : 9, `SUM(${col(i + 1)}5:${col(i + 1)}${rt - 1})`)).join("")}</row>`;
+  x += `<row r="${rt + 2}">${S(rt + 2, 0, note, 11)}</row>`;
+  const sheet = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetPr><pageSetUpPr fitToPage="1"/></sheetPr><sheetViews><sheetView rightToLeft="1" workbookViewId="0"><pane xSplit="1" ySplit="4" topLeftCell="B5" activePane="bottomRight" state="frozen"/></sheetView></sheetViews><cols><col min="1" max="1" width="22" customWidth="1"/><col min="2" max="${nc}" width="13" customWidth="1"/></cols><sheetData>${x}</sheetData><pageSetup orientation="landscape" fitToWidth="1" fitToHeight="0"/></worksheet>`;
+  const fx = (b, c, i) => `<font>${b ? "<b/>" : ""}<sz val="${i || 11}"/><color rgb="${c || "FF000000"}"/><name val="Arial"/></font>`;
+  const xf = (font, fill, bd, nf, al) => `<xf numFmtId="${nf || 0}" fontId="${font}" fillId="${fill}" borderId="${bd}" applyFont="1" applyFill="1" applyBorder="1" applyNumberFormat="1" applyAlignment="1"><alignment horizontal="${al || "center"}" vertical="center"${al === "w" ? "" : ""}/></xf>`;
+  const styles = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="2"><numFmt numFmtId="164" formatCode="#,##0;(#,##0);&quot;-&quot;"/><numFmt numFmtId="165" formatCode="0.#;;&quot;-&quot;"/></numFmts><fonts count="6">${fx()}${fx(1, "FFFFFFFF")}${fx(1)}${fx(1, "FF000000", 16)}${fx(0, "FF7B7167", 10)}${fx(0, "FF0000FF")}</fonts><fills count="4"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF1F1B17"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFF2ECE3"/></patternFill></fill></fills><borders count="3"><border><left/><right/><top/><bottom/><diagonal/></border><border><left/><right/><top/><bottom style="thin"><color rgb="FFECE6DD"/></bottom><diagonal/></border><border><left/><right/><top style="medium"><color rgb="FF1F1B17"/></top><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="12">${xf(0, 0, 0, 0, "right")}${xf(3, 0, 0, 0, "right")}${xf(4, 0, 0, 0, "right")}${xf(1, 2, 0, 0, "center")}${xf(0, 0, 1, 0, "right")}${xf(5, 0, 1, 164)}${xf(5, 0, 1, 165)}${xf(2, 3, 1, 164)}${xf(2, 0, 2, 0, "right")}${xf(2, 0, 2, 164)}${xf(2, 0, 2, 165)}${xf(4, 0, 0, 0, "right")}</cellXfs></styleSheet>`;
+  const files = {
+    "[Content_Types].xml": `<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>`,
+    "_rels/.rels": `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`,
+    "xl/workbook.xml": `<?xml version="1.0" encoding="UTF-8"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="${X(sheetName).slice(0, 31)}" sheetId="1" r:id="rId1"/></sheets><calcPr fullCalcOnLoad="1"/></workbook>`,
+    "xl/_rels/workbook.xml.rels": `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`,
+    "xl/styles.xml": styles, "xl/worksheets/sheet1.xml": sheet };
+  const T = new Uint32Array(256).map((_, n) => { for (let k = 0; k < 8; k++) n = n & 1 ? 0xedb88320 ^ (n >>> 1) : n >>> 1; return n >>> 0; });
+  const crc = (b) => { let c = ~0; for (let i = 0; i < b.length; i++) c = T[(c ^ b[i]) & 255] ^ (c >>> 8); return ~c >>> 0; };
+  const parts = [], cd = []; let off = 0;
+  const u16 = (v) => [v & 255, v >> 8 & 255], u32 = (v) => [v & 255, v >> 8 & 255, v >> 16 & 255, v >>> 24 & 255];
+  for (const [name, txt] of Object.entries(files)) {
+    const nm = te.encode(name), d = te.encode(txt), c = crc(d);
+    const h = new Uint8Array([0x50, 0x4b, 3, 4, ...u16(20), ...u16(0x0800), ...u16(0), ...u16(0), ...u16(0x21), ...u32(c), ...u32(d.length), ...u32(d.length), ...u16(nm.length), ...u16(0)]);
+    parts.push(h, nm, d);
+    cd.push(new Uint8Array([0x50, 0x4b, 1, 2, ...u16(20), ...u16(20), ...u16(0x0800), ...u16(0), ...u16(0), ...u16(0x21), ...u32(c), ...u32(d.length), ...u32(d.length), ...u16(nm.length), ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(0), ...u32(off)]), nm);
+    off += h.length + nm.length + d.length;
+  }
+  const cdl = cd.reduce((a, b) => a + b.length, 0);
+  const end = new Uint8Array([0x50, 0x4b, 5, 6, ...u16(0), ...u16(0), ...u16(Object.keys(files).length), ...u16(Object.keys(files).length), ...u32(cdl), ...u32(off), ...u16(0)]);
+  const all = [...parts, ...cd, end], out = new Uint8Array(all.reduce((a, b) => a + b.length, 0)); let p = 0; all.forEach((b) => { out.set(b, p); p += b.length; });
+  return out;
+}
+function payXlsx(rows) {
+  const heads = ["الموظف", ...PAYCOLS.map((c) => c[1])]; heads.hrs = [2, 6];
+  const data = rows.map(({ e, r }) => [e.full_name, ...PAYCOLS.map((c) => Number(r[c[0]] || 0))]);
+  const tot = PAYCOLS.slice(0, -1).map((c) => rows.reduce((a, x) => a + Number(x.r[c[0]] || 0), 0)); tot.push(rows.reduce((a, x) => a + Number(x.r.net_pay || 0), 0));
+  const bytes = xlsxBuild("رواتب " + st.month.slice(0, 7), st.co.name + " — كشف المرتبات", monthLabel(st.month) + " · بالجنيه المصري", heads, data, tot, "الأرقام الزرقاء مأخوذة من النظام، والإجمالي معادلات تتحسب تلقائياً.");
+  const blob = new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "mogzy-payroll-" + st.month.slice(0, 7) + ".xlsx"; document.body.appendChild(a); a.click(); a.remove();
+}
+function payCsv(rows) {
+  const q = (v) => '"' + String(v ?? "").replace(/"/g, '""') + '"';
+  const lines = [["الموظف", ...PAYCOLS.map((c) => c[1])].map(q).join(",")];
+  rows.forEach(({ e, r }) => lines.push([q(e.full_name), ...PAYCOLS.map((c) => Number(r[c[0]] || 0))].join(",")));
+  const tot = PAYCOLS.map((c) => rows.reduce((a, x) => a + Number(x.r[c[0]] || 0), 0));
+  lines.push([q("الإجمالي"), ...tot].join(","));
+  const blob = new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "mogzy-payroll-" + st.month.slice(0, 7) + ".csv"; document.body.appendChild(a); a.click(); a.remove();
+}
+function payslipHtml(e, r) {
+  const L = (t, v, cls = "") => Number(v) ? `<tr class="${cls}"><td>${t}</td><td class="n">${money(v)}</td></tr>` : "";
+  return `<div class="ps"><h2>${esc(st.co.name)}</h2><div class="sub">قسيمة مرتب · ${monthLabel(st.month)}</div><h3>${esc(e.full_name)}${e.job_title ? " · " + esc(e.job_title) : ""}</h3>
+   <table><tr><td>الأساسي</td><td class="n">${money(r.base_pay)}</td></tr>${L("أجر الإضافي (" + Number(r.overtime_hours || 0) + " ساعة)", r.overtime_pay)}${L("أجر يوم الراحة", r.rest_day_pay)}${L("مكافآت", r.bonuses)}
+   ${L("خصم الغياب (" + Number(r.absent_days || 0) + " يوم)", r.absence_deduction, "d")}${L("خصم التأخير", r.late_deduction, "d")}${L("خصم الانصراف المبكر", r.early_leave_deduction, "d")}${L("خصومات أخرى", r.deductions, "d")}${L("جزاءات", r.penalties_applied, "d")}${L("تأمينات", r.insurance, "d")}${L("ضريبة دخل", r.income_tax, "d")}${L("سلف مخصومة", r.advances_deducted, "d")}
+   <tr class="tot"><td>الصافي</td><td class="n">${money(r.net_pay)} ج.م</td></tr></table><div class="sig">توقيع الموظف: ____________________</div></div>`;
+}
 async function tabPay() {
   $("body").innerHTML = `<h1>المرتبات</h1><div class="card"><label class="f">الشهر<input id="pm" type="month" value="${st.month.slice(0, 7)}"></label><div id="pt" class="sub">جاري الحساب…</div></div>`;
   $("pm").onchange = () => { st.month = $("pm").value + "-01"; tabPay(); };
   try {
     const rows = await Promise.all(st.emps.filter((e) => e.active).map(async (e) => { const r = await rpc("payroll_month", { p_employee: e.id, p_month: st.month }); return { e, r: Array.isArray(r) ? r[0] : r }; }));
+    st.payRows = rows;
     const sum = rows.reduce((a, x) => a + Number(x.r?.net_pay || 0), 0);
-    $("pt").className = ""; $("pt").innerHTML = `<table><tr><th>الموظف</th><th>الأساسي</th><th>إضافي</th><th>خصومات</th><th>سلف</th><th>الصافي</th></tr>${rows.map(({ e, r }) => {
-      const ded = Number(r.late_deduction) + Number(r.early_leave_deduction) + Number(r.absence_deduction) + Number(r.deductions) + Number(r.penalties_applied) + Number(r.insurance) + Number(r.income_tax);
-      return `<tr><td>${esc(e.full_name)}</td><td class="n">${money(r.base_pay)}</td><td class="n">${money(Number(r.overtime_pay) + Number(r.rest_day_pay) + Number(r.bonuses))}</td><td class="n">${money(ded)}</td><td class="n">${money(r.advances_deducted)}</td><td class="n"><b>${money(r.net_pay)}</b></td></tr>`; }).join("")}
-      <tr><td><b>الإجمالي</b></td><td></td><td></td><td></td><td></td><td class="n"><b>${money(sum)}</b></td></tr></table>`;
+    $("pt").className = ""; $("pt").innerHTML = `<div class="btns"><button class="btn sm" id="pp">طباعة</button><button class="btn sm" id="px">تنزيل Excel</button></div>
+      <table><tr><th>الموظف</th><th>الأساسي</th><th>إضافي</th><th>خصومات</th><th>سلف</th><th>الصافي</th></tr>${rows.map(({ e, r }, i) => { const t = payTotals(r);
+      return `<tr class="clk" data-i="${i}"><td>${esc(e.full_name)}</td><td class="n">${money(r.base_pay)}</td><td class="n">${money(t.extra)}</td><td class="n">${money(t.ded)}</td><td class="n">${money(r.advances_deducted)}</td><td class="n"><b>${money(r.net_pay)}</b></td></tr>`; }).join("")}
+      <tr><td><b>الإجمالي</b></td><td></td><td></td><td></td><td></td><td class="n"><b>${money(sum)}</b></td></tr></table><div class="sub" style="margin-top:8px">اضغط على اسم موظف لعرض قسيمة مرتبه وطباعتها.</div>`;
+    $("px").onclick = () => payXlsx(rows);
+    $("pp").onclick = () => printHtml(`<h2>${esc(st.co.name)}</h2><div class="sub">كشف المرتبات · ${monthLabel(st.month)}</div><table><tr><th>الموظف</th><th>الأساسي</th><th>إضافي</th><th>خصومات</th><th>سلف</th><th>الصافي</th><th>التوقيع</th></tr>${rows.map(({ e, r }) => { const t = payTotals(r); return `<tr><td>${esc(e.full_name)}</td><td class="n">${money(r.base_pay)}</td><td class="n">${money(t.extra)}</td><td class="n">${money(t.ded)}</td><td class="n">${money(r.advances_deducted)}</td><td class="n"><b>${money(r.net_pay)}</b></td><td class="sg"></td></tr>`; }).join("")}<tr><td><b>الإجمالي</b></td><td></td><td></td><td></td><td></td><td class="n"><b>${money(sum)}</b></td><td></td></tr></table>`);
+    document.querySelectorAll("tr.clk").forEach((tr) => (tr.onclick = () => {
+      const { e, r } = rows[Number(tr.dataset.i)], o = document.createElement("div");
+      o.className = "ov"; o.innerHTML = `<div class="sheet">${payslipHtml(e, r)}<div class="btns"><button class="btn p sm" id="ps">طباعة القسيمة</button><button class="btn sm" id="pc">إغلاق</button></div></div>`;
+      document.body.appendChild(o); o.querySelector("#pc").onclick = () => o.remove(); o.querySelector("#ps").onclick = () => printHtml(payslipHtml(e, r));
+    }));
   } catch (e) { $("pt").innerHTML = `<span class="err">${esc(arabicErr(e))}</span>`; }
 }
 function tabSet() {
   const s = st.set, tg = (k, l, sub = "") => `<label class="row" style="cursor:pointer"><div class="grow"><b>${l}</b>${sub ? `<small>${sub}</small>` : ""}</div><input type="checkbox" data-k="${k}" ${s[k] ? "checked" : ""}></label>`;
-  const num = (k, l, u) => `<div class="row"><div class="grow"><b>${l}</b></div><input type="number" step="any" data-n="${k}" value="${s[k] ?? ""}" style="width:110px;text-align:center"><span class="sub" style="width:40px">${u}</span></div>`;
+  const num = (k, l, u, h = "") => `<div class="row"><div class="grow"><b>${l}</b>${h ? `<small>${h}</small>` : ""}</div><input type="number" step="any" data-n="${k}" value="${s[k] ?? ""}" style="width:90px;text-align:center"><span class="sub" style="width:44px">${u}</span></div>`;
+  const numn = (k, l, u, h = "") => num(k, l, u, h).replace("data-n=", "data-nn=");
   $("body").innerHTML = `<h1>الإعدادات</h1>
    <div class="card"><div class="sub">كود شركتك (يعطيه الموظف عند ربط موبايله)</div><div class="code">${esc(st.co.code)}</div>
      <div class="sub" style="margin-top:12px">ابعت للموظف رابط صفحته مع الكود:</div><button class="btn sm" id="cpl" style="margin-top:6px">نسخ رابط الموظفين</button></div>
@@ -325,17 +516,34 @@ function tabSet() {
    <div class="card"><h2>تطبيق الموظف على موبايله</h2><div class="sub" style="margin-bottom:6px">اختياري. الحضور يبقى من الجهاز فقط.</div>
      ${tg("employee_app_enabled", "السماح للموظفين بالدخول من موبايلهم")}${tg("employee_auto_link", "ربط تلقائي إذا تطابق رقم الموبايل", "بدون موافقتك")}${tg("employee_see_salary", "يشوف الموظف مرتبه")}${tg("employee_can_request_advance", "يطلب سلفة")}${tg("employee_can_request_leave", "يطلب إجازة")}</div>
    <div class="card"><h2>الضرائب والتأمينات</h2><div class="sub" style="margin-bottom:6px">مقفولة افتراضياً ولا يُخصم منها شيء.</div>${tg("apply_income_tax", "خصم ضريبة المرتبات")}${tg("apply_insurance", "خصم التأمينات الاجتماعية")}</div>
-   <div class="card"><h2>الأرقام (كلها بيدك)</h2><div class="sub" style="margin-bottom:6px">القانون مجرد مرجع ولا يُفرض عليك.</div>
-     ${num("late_grace_minutes", "سماح التأخير", "دقيقة")}${num("overtime_day_pct", "الإضافي النهاري", "%")}${num("overtime_night_pct", "الإضافي الليلي", "%")}${num("rest_day_extra_pct", "الزيادة في يوم الراحة", "%")}${num("min_match_score", "حساسية التعرف على الوجه", "0-1")}</div>
+   <div class="card"><h2>أيام العمل والإجازات</h2><div class="sub" style="margin-bottom:6px">اختار أيام الإجازة الأسبوعية. لو مفيش، سيبهم كلهم مقفولين.</div>
+     <div class="dchips" id="wo">${DAYS.map((d, i) => `<button type="button" class="dc ${(s.weekly_off_days || []).includes(i) ? "on" : ""}" data-day="${i}">${d}</button>`).join("")}</div>
+     ${num("free_absence_days", "أيام غياب مسموحة لكل موظف في الشهر", "يوم", "بدون خصم. تقدر تغيّرها لموظف معين من صفحته.")}</div>
+   <div class="card"><h2>التأخير</h2>${tg("late_deduction_enabled", "خصم التأخير")}${num("late_grace_minutes", "سماح التأخير", "دقيقة")}
+     <div class="sub" style="margin:10px 0 4px">جدول الخصم: بعد كام دقيقة تأخير يتخصم كام % من أجر اليوم (سيب الصف فاضي لو مش محتاجه)</div>
+     ${[0, 1, 2, 3].map((i) => { const t = (s.late_tiers || [])[i] || {}; return `<div class="row" style="min-height:54px"><span class="sub">بعد</span><input type="number" data-ta="${i}" value="${t.after_min ?? ""}" style="width:80px;text-align:center"><span class="sub">دقيقة</span><span class="grow"></span><input type="number" step="any" data-tp="${i}" value="${t.pct_of_day ?? ""}" style="width:80px;text-align:center"><span class="sub">% من اليوم</span></div>`; }).join("")}</div>
+   <div class="card"><h2>الغياب والانصراف المبكر</h2>${tg("absence_deduction_enabled", "خصم الغياب")}${num("absence_deduction_days", "المخصوم عن كل يوم غياب", "يوم", "1 = يوم واحد، 2 = يومين")}${num("absence_penalty_days", "جزاء إضافي على الغياب بدون إذن", "يوم")}${tg("early_leave_deduction_enabled", "خصم الانصراف المبكر", "بيتخصم الساعات الناقصة")}</div>
+   <div class="card"><h2>الإضافي والشغل في الإجازة</h2>${tg("overtime_enabled", "حساب الإضافي")}${num("overtime_day_pct", "زيادة الإضافي النهاري", "%")}${num("overtime_night_pct", "زيادة الإضافي الليلي", "%")}
+     <div class="row"><div class="grow"><b>الليل من</b></div><input type="time" data-t="night_from" value="${(s.night_from || "22:00").slice(0, 5)}" style="width:120px"><span class="sub" style="width:30px;text-align:center">إلى</span><input type="time" data-t="night_to" value="${(s.night_to || "06:00").slice(0, 5)}" style="width:120px"></div>
+     ${num("overtime_round_minutes", "تقريب الإضافي (لأقرب)", "دقيقة", "المجموع الشهري بيتقرب لتحت")}${numn("max_presence_hours", "أقصى مدة تواجد في اليوم", "ساعة", "فاضي = بدون حد")}
+     ${tg("rest_day_pay_enabled", "أجر الشغل في يوم الإجازة")}${num("rest_day_extra_pct", "الزيادة في يوم الراحة", "%", "100 = يوم الراحة بضعف الأجر")}</div>
+   <div class="card"><h2>الراتب</h2>${numn("salary_days_basis", "أيام الشهر لحساب أجر اليوم", "يوم", "فاضي = عدد أيام الشهر الفعلي، أو اكتب 30")}${numn("max_penalty_days_per_month", "أقصى جزاءات في الشهر", "يوم", "فاضي = بدون حد")}</div>
+   <div class="card"><h2>الكشك</h2>${num("min_match_score", "حساسية التعرف على الوجه", "0-1", "كل ما قل الرقم بقى أسهل في القبول")}</div>
    <div id="err" class="err"></div><button class="btn p full" id="sv">حفظ</button>
    <div style="height:14px"></div><button class="btn full" id="out">تسجيل الخروج</button>`;
   $("out").onclick = logout;
+  document.querySelectorAll("#wo .dc").forEach((b) => (b.onclick = () => b.classList.toggle("on")));
   $("cpk").onclick = async () => { const ok = await copyText(new URL("./", location.href).href); if (ok) $("cpk").textContent = "تم النسخ ✓"; };
   $("cpl").onclick = async () => { const ok = await copyText(new URL("employee.html", location.href).href); if (ok) $("cpl").textContent = "تم النسخ ✓"; };
   $("sv").onclick = async () => {
     setErr(""); const body = {};
     document.querySelectorAll("[data-k]").forEach((i) => (body[i.dataset.k] = i.checked));
     document.querySelectorAll("[data-n]").forEach((i) => { if (i.value !== "") body[i.dataset.n] = Number(i.value); });
+    document.querySelectorAll("[data-nn]").forEach((i) => (body[i.dataset.nn] = i.value === "" ? null : Number(i.value)));
+    document.querySelectorAll("[data-t]").forEach((i) => { if (i.value) body[i.dataset.t] = i.value; });
+    body.weekly_off_days = [...document.querySelectorAll("#wo .dc.on")].map((b) => Number(b.dataset.day));
+    const tiers = [0, 1, 2, 3].map((i) => ({ after_min: document.querySelector(`[data-ta="${i}"]`).value, pct_of_day: document.querySelector(`[data-tp="${i}"]`).value })).filter((t) => t.after_min !== "" && t.pct_of_day !== "").map((t) => ({ after_min: Number(t.after_min), pct_of_day: Number(t.pct_of_day) })).sort((a, b) => a.after_min - b.after_min);
+    body.late_tiers = tiers;
     try { await db("company_settings?company_id=eq." + st.co.id, { method: "PATCH", body }); Object.assign(st.set, body); setErr("تم الحفظ ✓", true); } catch (e) { setErr(arabicErr(e)); }
   };
 }

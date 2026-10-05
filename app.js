@@ -177,6 +177,7 @@ async function scanLoop() {
 
 /* ---------- liveness: random head turn / blink, then re-verify the same person ---------- */
 const MOTION_MIN = 0.004;
+const SNAPSHOTS = false; // per-punch photo + AI review: paused until a stronger method is chosen
 const CH = {
   turn_right: { text: "حرّك رأسك ببطء لليمين", test: (lm) => yaw(lm) < 0.38 },
   turn_left:  { text: "حرّك رأسك ببطء لليسار", test: (lm) => yaw(lm) > 0.62 },
@@ -235,7 +236,7 @@ async function challenge(emp, firstDist) {
     passive = "passive:" + (mv === null ? "na" : mv.toFixed(4));
     if (mv !== null && mv < MOTION_MIN) { mode = "scan"; oval(); setStatus("لم يتأكد الجهاز أنك شخص حقيقي", "انظر للكاميرا بشكل طبيعي وحاول مرة أخرى.", "warn"); await sleep(2200); return resumeScan(); }
   }
-  cur = { emp, score, challenge: passive, shot: snapshot() };
+  cur = { emp, score, challenge: passive, shot: SNAPSHOTS ? snapshot() : null };
   openMenu();
 }
 function resumeScan() { clearTimeout(scanTimer); sc.hold = 0; sc.goneAt = 0; scReset(); mode = "scan"; oval(); setStatus("قف أمام الكاميرا", "انظر للكاميرا مباشرة وسيتعرف عليك الجهاز."); scanTimer = setTimeout(scanLoop, 0); }
