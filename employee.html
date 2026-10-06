@@ -247,7 +247,7 @@ async function loadAdmin() {
   const today0 = new Date(); today0.setHours(0, 0, 0, 0);
   const [co, set, emps, ses, adv, lv, links, evs, branches, devices, status, zones, hol] = await Promise.all([
     db("companies?select=id,name,code&limit=1"), db("company_settings?select=*&limit=1"),
-    db("employees?select=id,full_name,job_title,phone,monthly_salary,shift_start,shift_end,active,user_id,free_absence_days,weekly_off_days,branch_id&order=full_name"),
+    db("employees?select=id,full_name,job_title,phone,monthly_salary,pay_type,pay_rate,shift_start,shift_end,active,user_id,free_absence_days,weekly_off_days,branch_id&order=full_name"),
     db("attendance_sessions?select=employee_id,check_in,check_out&or=(check_out.is.null,check_in.gte." + today0.toISOString() + ")"),
     db("advances?select=*&status=eq.pending&order=created_at"), db("leave_requests?select=*&status=eq.pending&order=created_at"),
     db("employee_link_requests?select=*&status=eq.pending").catch(() => []),
@@ -384,7 +384,7 @@ function tabReq() {
 }
 function tabEmp() {
   $("body").innerHTML = `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px"><h1 style="margin:12px 0 14px">الموظفون</h1><div style="display:flex;gap:8px"><button class="btn sm" id="ei" style="white-space:nowrap">استيراد</button><button class="btn p sm" id="ea" style="white-space:nowrap">＋ موظف</button></div></div>
-   <div class="card" style="padding:6px 20px">${st.emps.map((e) => `<div class="row clk" data-e="${e.id}"><div class="grow"><b>${esc(e.full_name)}</b><small>${esc(e.job_title || "")} ${e.shift_start.slice(0, 5)} → ${e.shift_end.slice(0, 5)} · ${money(e.monthly_salary)} ج.م${e.branch_id && st.branches.length ? " · " + esc((st.branches.find((b) => b.id === e.branch_id) || {}).name || "") : ""}</small></div>${e.active ? "" : '<span class="chip c-amber">موقوف</span>'}<button class="btn sm" data-b="${e.id}">بونص / خصم</button></div>`).join("") || '<div class="sub" style="padding:14px 0">لا يوجد موظفون. اضغط ＋ موظف عشان تضيف أول موظف.</div>'}</div>
+   <div class="card" style="padding:6px 20px">${st.emps.map((e) => `<div class="row clk" data-e="${e.id}"><div class="grow"><b>${esc(e.full_name)}</b><small>${esc(e.job_title || "")} ${e.shift_start.slice(0, 5)} → ${e.shift_end.slice(0, 5)} · ${payShort(e)}${e.branch_id && st.branches.length ? " · " + esc((st.branches.find((b) => b.id === e.branch_id) || {}).name || "") : ""}</small></div>${e.active ? "" : '<span class="chip c-amber">موقوف</span>'}<button class="btn sm" data-b="${e.id}">بونص / خصم</button></div>`).join("") || '<div class="sub" style="padding:14px 0">لا يوجد موظفون. اضغط ＋ موظف عشان تضيف أول موظف.</div>'}</div>
    <div class="sub" style="text-align:center">اضغط على الموظف لتعديله أو لعرض سجل حضوره.</div>`;
   document.querySelectorAll("[data-e]").forEach((r) => (r.onclick = () => empSheet(st.emps.find((x) => x.id === r.dataset.e))));
   document.querySelectorAll("[data-b]").forEach((b) => (b.onclick = (ev) => { ev.stopPropagation(); adjSheet(st.emps.find((x) => x.id === b.dataset.b)); }));
@@ -514,20 +514,64 @@ function importEmpSheet() {
     catch (x) { q("#igo").disabled = false; q("#xe").textContent = arabicErr(x); }
   };
 }
+const payLabel = (t) => t === "daily" ? "سعر اليوم (ج.م)" : t === "hourly" ? "سعر الساعة (ج.م)" : (st.set.salary_basis === "per_period" ? "المرتب لكل فترة قبض (ج.م)" : "المرتب الشهري (ج.م)");
+const payHint = (t) => t === "daily" ? "بيتحاسب على الأيام اللي حضرها بس، ومفيش خصم غياب. الإجازات غير مدفوعة." : t === "hourly" ? "بيتحاسب على الساعات اللي اشتغلها بس، ومفيش خصم تأخير أو غياب. الإجازات غير مدفوعة." : "";
+const payShort = (e) => e.pay_type === "daily" ? money(e.pay_rate) + " ج.م/يوم" : e.pay_type === "hourly" ? money(e.pay_rate) + " ج.م/ساعة" : money(e.monthly_salary) + " ج.م";
+const payType = (t) => `<option value="monthly" ${t === "monthly" ? "selected" : ""}>شهري</option><option value="daily" ${t === "daily" ? "selected" : ""}>باليوم</option><option value="hourly" ${t === "hourly" ? "selected" : ""}>بالساعة</option>`;
+const AU_COL = { full_name: "الاسم", job_title: "الوظيفة", phone: "الموبايل", monthly_salary: "المرتب الشهري", pay_type: "نظام الراتب", pay_rate: "سعر اليوم/الساعة", shift_start: "بداية الشيفت", shift_end: "نهاية الشيفت", active: "شغّال", branch_id: "الفرع", free_absence_days: "أيام غياب مسموحة", weekly_off_days: "أيام الإجازة", annual_leave_days: "الإجازة السنوية", hired_on: "تاريخ التعيين", insured: "مؤمّن عليه", amount: "المبلغ", kind: "النوع", reason: "السبب", status: "الحالة", period_month: "الشهر", effective_date: "تاريخ السريان", from_date: "من", to_date: "إلى", name: "الاسم", day: "اليوم", address: "العنوان", radius_m: "النطاق (متر)", lat: "خط العرض", lng: "خط الطول", check_in: "الحضور", check_out: "الانصراف", work_date: "اليوم", repay_month: "شهر الخصم", employee_id: "الموظف" };
+const AU_ENT = { employees: "الموظف", adjustments: "بونص/خصم", advances: "سلفة", leave_requests: "إجازة", day_waivers: "إعفاء", holidays: "إجازة رسمية", branches: "الفرع", attendance_sessions: "حضور/انصراف", company_settings: "الإعدادات" };
+const AU_VAL = { monthly: "شهري", daily: "باليوم", hourly: "بالساعة", bonus: "بونص", deduction: "خصم", penalty: "جزاء", pending: "معلّق", approved: "موافق", rejected: "مرفوض", true: "نعم", false: "لا", absence: "غياب", late: "تأخير", early: "انصراف مبكر" };
+function auVal(k, v) {
+  if (v === null || v === undefined || v === "") return "—";
+  if (k === "branch_id") return ((st.branches || []).find((b) => b.id === v) || {}).name || "—";
+  if ((k === "check_in" || k === "check_out") && typeof v === "string") return hhmm(v);
+  if (Array.isArray(v)) return v.join("، ");
+  if (typeof v === "object") return "اتغيّر";
+  return AU_VAL[String(v)] || String(v);
+}
+function auLines(r) {
+  const d = r.details || {};
+  if (r.action === "settings_changed") {
+    const b = d.before || {}, a = d.after || {}, ks = Object.keys(a).filter((k) => JSON.stringify(a[k]) !== JSON.stringify(b[k]) && k !== "updated_at");
+    return ks.slice(0, 6).map((k) => `${esc(k)}: ${esc(auVal(k, b[k]))} ← ${esc(auVal(k, a[k]))}`).concat(ks.length > 6 ? ["و " + (ks.length - 6) + " تغييرات تانية"] : []);
+  }
+  const ch = d.changes || {}, ks = Object.keys(ch);
+  if (r.action === "delete") return [];
+  return ks.filter((k) => k !== "employee_id").slice(0, 6).map((k) => r.action === "insert" ? `${esc(AU_COL[k] || k)}: ${esc(auVal(k, ch[k].new))}` : `${esc(AU_COL[k] || k)}: ${esc(auVal(k, ch[k].old))} ← ${esc(auVal(k, ch[k].new))}`);
+}
+async function auditSheet() {
+  const o = overlay(); let rows = [], ent = "", more = true;
+  const draw = () => {
+    o.innerHTML = `<div class="sheet"><button type="button" class="xclose" aria-label="إغلاق">✕</button><h2>سجل التغييرات</h2>
+      <label class="f">عرض<select id="aue"><option value="">كل التغييرات</option>${Object.entries(AU_ENT).map(([k, v]) => `<option value="${k}" ${ent === k ? "selected" : ""}>${v}</option>`).join("")}</select></label>
+      ${rows.map((r) => { const ls = auLines(r), v = { insert: "أضاف", update: "عدّل", delete: "حذف", settings_changed: "غيّر" }[r.action] || r.action;
+        return `<div class="row" style="align-items:flex-start"><div class="grow"><b>${esc(r.actor_name)}</b> ${v} ${esc(AU_ENT[r.entity] || r.entity)}${(r.details || {}).label ? " «" + esc(r.details.label) + "»" : ""}<small>${new Date(r.at).toLocaleString("ar-EG", { dateStyle: "medium", timeStyle: "short", timeZone: "Africa/Cairo" })}</small>${ls.map((l) => `<small style="display:block">${l}</small>`).join("")}</div></div>`; }).join("") || '<div class="sub" style="padding:12px 0">مفيش تغييرات متسجلة لسه.</div>'}
+      ${more && rows.length ? '<button type="button" class="btn sm" id="aum" style="margin-top:8px">أقدم من كده</button>' : ""}</div>`;
+    o.querySelector(".xclose").onclick = () => o.remove();
+    o.querySelector("#aue").onchange = (ev) => { ent = ev.target.value; rows = []; more = true; load(); };
+    const m = o.querySelector("#aum"); if (m) m.onclick = load;
+  };
+  const load = async () => {
+    try { const r = await rpc("audit_feed", { p_limit: 30, p_before: rows.length ? rows[rows.length - 1].id : null, p_entity: ent || null, p_employee: null }); rows = rows.concat(r || []); more = (r || []).length === 30; draw(); } catch (x) { alert(arabicErr(x)); }
+  };
+  draw(); load();
+}
 function addEmpSheet() {
   const o = overlay();
   o.innerHTML = `<div class="sheet"><button type="button" class="xclose" aria-label="إغلاق">✕</button><h2>موظف جديد</h2>
     <label class="f">الاسم<input id="en"></label>
     <div class="grid2"><label class="f">الوظيفة<input id="ej"></label><label class="f">الموبايل<input id="ep" type="tel" dir="ltr"></label></div>
-    <label class="f">${st.set.salary_basis === "per_period" ? "المرتب لكل فترة قبض (ج.م)" : "المرتب الشهري (ج.م)"}<input id="es" type="number" inputmode="decimal"></label>
+    <label class="f">نظام الراتب<select id="ept">${payType("monthly")}</select></label>
+    <label class="f"><span id="epl">${payLabel("monthly")}</span><input id="es" type="number" inputmode="decimal"></label><div class="sub" id="eph"></div>
     ${st.branches && st.branches.length ? `<label class="f">الفرع<select id="ebr"><option value="">بدون فرع</option>${st.branches.filter((b) => b.active).map((b) => `<option value="${b.id}" ${b.id === (null) ? "selected" : ""}>${esc(b.name)}</option>`).join("")}</select></label>` : ""}
     <div class="g2k"><label class="f">يبدأ الشغل<input id="ef" type="time" value="09:00"></label><label class="f">ينتهي<input id="et" type="time" value="17:00"></label></div>
     <div class="sub">لو الشيفت يعدّي منتصف الليل (مثل 18:00 إلى 02:00) يتحسب تلقائياً.</div>
     <div id="xe" class="err"></div><button class="btn p full" id="xs" style="margin-top:6px">إضافة الموظف</button></div>`;
   const q = (id) => o.querySelector(id);
+  q("#ept").onchange = () => { q("#epl").textContent = payLabel(q("#ept").value); q("#eph").textContent = payHint(q("#ept").value); };
   q("#xs").onclick = async () => {
-    const n = q("#en").value.trim(), sal = q("#es").value; if (!n || sal === "" || !(Number(sal) >= 0)) return (q("#xe").textContent = "اكتب الاسم والمرتب");
-    try { await db("employees", { method: "POST", prefer: "return=minimal", body: { company_id: st.co.id, full_name: n, job_title: q("#ej").value.trim() || null, phone: q("#ep").value.trim() || null, monthly_salary: Number(sal), shift_start: q("#ef").value, shift_end: q("#et").value, branch_id: q("#ebr") && q("#ebr").value ? q("#ebr").value : null } }); o.remove(); await loadAdmin(); } catch (x) { q("#xe").textContent = arabicErr(x); }
+    const n = q("#en").value.trim(), sal = q("#es").value, pt = q("#ept").value; if (!n || sal === "" || !(Number(sal) >= 0) || (pt !== "monthly" && !(Number(sal) > 0))) return (q("#xe").textContent = "اكتب الاسم والمرتب");
+    try { await db("employees", { method: "POST", prefer: "return=minimal", body: { company_id: st.co.id, full_name: n, job_title: q("#ej").value.trim() || null, phone: q("#ep").value.trim() || null, monthly_salary: pt === "monthly" ? Number(sal) : 0, pay_type: pt, pay_rate: pt === "monthly" ? null : Number(sal), shift_start: q("#ef").value, shift_end: q("#et").value, branch_id: q("#ebr") && q("#ebr").value ? q("#ebr").value : null } }); o.remove(); await loadAdmin(); } catch (x) { q("#xe").textContent = arabicErr(x); }
   };
 }
 async function adjSheet(e) {
@@ -556,6 +600,30 @@ async function adjSheet(e) {
   await draw();
 }
 
+function branchesPage() {
+  const o = overlay();
+  const draw = () => {
+    const brs = st.branches || [], emps = st.emps.filter((e) => e.active), devs = st.devices || [];
+    const opts = (cur) => `<option value="">بدون فرع</option>${brs.filter((b) => b.active || b.id === cur).map((b) => `<option value="${b.id}" ${b.id === cur ? "selected" : ""}>${esc(b.name)}</option>`).join("")}`;
+    const grp = (b) => {
+      const id = b ? b.id : null, es = emps.filter((e) => (e.branch_id || null) === id), ds = devs.filter((d) => (d.branch_id || null) === id);
+      const inn = es.filter((e) => statusOf(e).k === "in").length;
+      if (!b && !es.length) return "";
+      return `<div class="card" style="padding:12px 16px;margin-bottom:10px"><div class="row" style="border:0"><div class="grow"><b>${b ? esc(b.name) : "بدون فرع"}</b><small>${es.length} موظف · ${inn} داخل دلوقتي${b && !b.active ? " · موقوف" : ""}</small></div>${b ? `<button type="button" class="btn sm" data-ebr="${b.id}">تعديل</button>` : ""}</div>
+        ${es.map((e) => `<div class="row"><div class="grow"><b>${esc(e.full_name)}</b></div><select data-pe="${e.id}" style="height:40px;width:auto;font-size:14px;padding:0 8px">${opts(e.branch_id)}</select></div>`).join("") || '<div class="sub">مفيش موظفين</div>'}
+        ${ds.map((d) => `<div class="row"><div class="grow"><b>📟 ${esc(d.name)}</b><small>جهاز كشك</small></div></div>`).join("")}</div>`;
+    };
+    const allDev = devs.length && brs.length ? `<div class="card" style="padding:12px 16px"><b>أجهزة الكشك</b>${devs.map((d) => `<div class="row"><div class="grow"><b>${esc(d.name)}</b></div><select data-pd="${d.id}" style="height:40px;width:auto;font-size:14px;padding:0 8px"><option value="">كل الفروع</option>${brs.map((b) => `<option value="${b.id}" ${d.branch_id === b.id ? "selected" : ""}>${esc(b.name)}</option>`).join("")}</select></div>`).join("")}</div>` : "";
+    o.innerHTML = `<div class="sheet"><button type="button" class="xclose" aria-label="إغلاق">✕</button><h2>كل الفروع</h2><div class="sub" style="margin-bottom:10px">غيّر فرع أي موظف أو جهاز من هنا مباشرة.</div>${brs.map(grp).join("")}${grp(null)}${allDev}<button type="button" class="btn" id="bpn" style="margin-top:8px">＋ فرع جديد</button></div>`;
+    o.querySelector(".xclose").onclick = () => o.remove();
+    const run = async (path, v) => { try { await db(path, { method: "PATCH", body: { branch_id: v || null } }); await loadAdmin(); draw(); } catch (x) { alert(arabicErr(x)); } };
+    o.querySelectorAll("[data-pe]").forEach((x) => (x.onchange = () => run(`employees?id=eq.${x.dataset.pe}`, x.value)));
+    o.querySelectorAll("[data-pd]").forEach((x) => (x.onchange = () => run(`devices?id=eq.${x.dataset.pd}`, x.value)));
+    o.querySelectorAll("[data-ebr]").forEach((x) => (x.onclick = () => { o.remove(); branchSheet((st.branches || []).find((b) => b.id === x.dataset.ebr)); }));
+    $("bpn").onclick = () => { o.remove(); branchSheet(null); };
+  };
+  draw();
+}
 function branchSheet(b) {
   const o = overlay(), nw = !b; b = b || { name: "", address: "", lat: null, lng: null, radius_m: 150, active: true };
   o.innerHTML = `<div class="sheet"><button type="button" class="xclose" aria-label="إغلاق">✕</button><h2>${nw ? "فرع جديد" : esc(b.name)}</h2>
@@ -589,7 +657,8 @@ function empSheet(e) {
   o.innerHTML = `<div class="sheet"><button type="button" class="xclose" aria-label="إغلاق">✕</button><h2>${esc(e.full_name)}</h2>
     <label class="f">الاسم<input id="xn" value="${esc(e.full_name)}"></label>
     <div class="grid2"><label class="f">الوظيفة<input id="xj" value="${esc(e.job_title || "")}"></label><label class="f">الموبايل<input id="xp" type="tel" dir="ltr" value="${esc(e.phone || "")}"></label></div>
-    <label class="f">${st.set.salary_basis === "per_period" ? "المرتب لكل فترة قبض (ج.م)" : "المرتب الشهري (ج.م)"}<input id="xs" type="number" inputmode="decimal" value="${Number(e.monthly_salary)}"></label>
+    <label class="f">نظام الراتب<select id="xpt">${payType(e.pay_type || "monthly")}</select></label>
+    <label class="f"><span id="xpl">${payLabel(e.pay_type || "monthly")}</span><input id="xs" type="number" inputmode="decimal" value="${Number((e.pay_type && e.pay_type !== "monthly") ? e.pay_rate : e.monthly_salary)}"></label><div class="sub" id="xph">${payHint(e.pay_type || "monthly")}</div>
     ${st.branches && st.branches.length ? `<label class="f">الفرع<select id="xbr"><option value="">بدون فرع</option>${st.branches.filter((b) => b.active).map((b) => `<option value="${b.id}" ${b.id === (e.branch_id) ? "selected" : ""}>${esc(b.name)}</option>`).join("")}</select></label>` : ""}
     <div class="grid2"><label class="f">يبدأ الشغل<input id="xf" type="time" value="${e.shift_start.slice(0, 5)}"></label><label class="f">ينتهي<input id="xt" type="time" value="${e.shift_end.slice(0, 5)}"></label></div>
     <label class="f">أيام غياب مسموحة في الشهر (فاضي = زي إعدادات الشركة)<input id="xg" type="number" inputmode="decimal" value="${e.free_absence_days ?? ""}"></label>
@@ -615,10 +684,11 @@ function empSheet(e) {
   q("#xo").onchange = () => (q("#xw").style.display = q("#xo").checked ? "" : "none");
   o.querySelectorAll("#xw .dc").forEach((b) => (b.onclick = () => b.classList.toggle("on")));
   q("#xa").onclick = () => { o.remove(); attSheet(e); };
+  q("#xpt").onchange = () => { q("#xpl").textContent = payLabel(q("#xpt").value); q("#xph").textContent = payHint(q("#xpt").value); };
   q("#xv").onclick = async () => {
-    const n = q("#xn").value.trim(), sal = q("#xs").value;
-    if (!n || sal === "" || !(Number(sal) >= 0)) return er("اكتب الاسم والمرتب");
-    try { await db(`employees?id=eq.${e.id}`, { method: "PATCH", body: { full_name: n, job_title: q("#xj").value.trim() || null, phone: q("#xp").value.trim() || null, monthly_salary: Number(sal), shift_start: q("#xf").value, shift_end: q("#xt").value, branch_id: q("#xbr") && q("#xbr").value ? q("#xbr").value : null, free_absence_days: q("#xg").value === "" ? null : Number(q("#xg").value), weekly_off_days: q("#xo").checked ? [...o.querySelectorAll("#xw .dc.on")].map((b) => Number(b.dataset.day)) : null, ...(q("#xl") ? { annual_leave_days: q("#xl").value === "" ? null : Number(q("#xl").value) } : {}) } }); o.remove(); await loadAdmin(); } catch (x) { fail(x); }
+    const n = q("#xn").value.trim(), sal = q("#xs").value, pt = q("#xpt").value;
+    if (!n || sal === "" || !(Number(sal) >= 0) || (pt !== "monthly" && !(Number(sal) > 0))) return er("اكتب الاسم والمرتب");
+    try { await db(`employees?id=eq.${e.id}`, { method: "PATCH", body: { full_name: n, job_title: q("#xj").value.trim() || null, phone: q("#xp").value.trim() || null, monthly_salary: pt === "monthly" ? Number(sal) : 0, pay_type: pt, pay_rate: pt === "monthly" ? null : Number(sal), shift_start: q("#xf").value, shift_end: q("#xt").value, branch_id: q("#xbr") && q("#xbr").value ? q("#xbr").value : null, free_absence_days: q("#xg").value === "" ? null : Number(q("#xg").value), weekly_off_days: q("#xo").checked ? [...o.querySelectorAll("#xw .dc.on")].map((b) => Number(b.dataset.day)) : null, ...(q("#xl") ? { annual_leave_days: q("#xl").value === "" ? null : Number(q("#xl").value) } : {}) } }); o.remove(); await loadAdmin(); } catch (x) { fail(x); }
   };
   q("#xk").onclick = async () => {
     if (e.active && !confirm("إيقاف " + e.full_name + "؟ مش هيظهر في الكشك ولا في المرتبات.")) return;
@@ -1165,6 +1235,7 @@ function tabSet() {
      ${numn("advance_max_pct", "أقصى سلفة", "% من المرتب", "سيبها فاضية = بدون حد")}${numn("advance_max_per_period", "أقصى عدد سلف في الفترة", "سلفة", "سيبها فاضية = بدون حد")}
      ${num("advance_max_installments", "أقصى عدد أقساط للسلفة", "قسط", "1 = بدون تقسيط")}`)}
    ${sec("الفروع", (st.branches || []).length ? (st.branches || []).length + " فرع" : "فرع واحد", `<div class="sub" style="margin-bottom:6px">لو شركتك فيها أكتر من فرع ضيفهم هنا، واربط كل موظف وجهاز بفرعه.</div>
+     <button type="button" class="btn" id="brPage" style="margin-bottom:8px">فتح صفحة كل الفروع</button>
      ${(st.branches || []).map((b) => `<div class="row clk" data-br="${b.id}"><div class="grow"><b>${esc(b.name)}</b><small>${st.emps.filter((e) => e.branch_id === b.id).length} موظف${b.active ? "" : " · موقوف"}</small></div></div>`).join("")}
      <button type="button" class="btn sm" id="brAdd" style="margin-top:8px">＋ فرع جديد</button>
      ${(st.devices || []).length && (st.branches || []).length ? `<div class="sub" style="margin-top:14px">أجهزة الكشك (اختار الفرع لكل جهاز):</div>${st.devices.map((d) => `<div class="row"><div class="grow"><b>${esc(d.name)}</b></div><select data-dv="${d.id}" style="height:40px;width:auto;font-size:14px;padding:0 8px"><option value="">كل الفروع</option>${st.branches.map((b) => `<option value="${b.id}" ${d.branch_id === b.id ? "selected" : ""}>${esc(b.name)}</option>`).join("")}</select></div>`).join("")}` : ""}`)}
@@ -1180,6 +1251,7 @@ function tabSet() {
    ${sec("الموظفين على موبايلهم", onoff(s.employee_app_enabled), `<div class="sub" style="margin-bottom:6px">اختياري. الحضور يبقى من الجهاز فقط.</div>
      ${tg("employee_app_enabled", "السماح للموظفين بالدخول من موبايلهم")}${tg("employee_auto_link", "ربط تلقائي إذا تطابق رقم الموبايل", "بدون موافقتك")}${tg("employee_see_salary", "يشوف الموظف مرتبه")}${tg("employee_can_request_advance", "يطلب سلفة")}${tg("employee_can_request_leave", "يطلب إجازة")}`)}
    ${sec("الإشعارات", '<span id="pst">...</span>', `<div class="sub" style="margin-bottom:8px">يوصلك إشعار على الموبايل لما موظف يطلب سلفة أو إجازة. فعّله على كل جهاز عايز الإشعار عليه.</div><button class="btn p sm" id="pn">تفعيل الإشعارات على الجهاز ده</button><div id="pne" class="sub" style="margin-top:8px"></div>`)}
+   ${st.me && (st.me.role === "owner" || st.me.role === "accountant") ? sec("سجل التغييرات", "مين غيّر إيه ومتى", `<div class="sub" style="margin-bottom:8px">كل تعديل بتعمله الإدارة على الموظفين والمرتبات والسلف والإجازات والإعدادات بيتسجل هنا باسم اللي عمله ووقته.</div><button type="button" class="btn" id="auOpen">فتح سجل التغييرات</button>`) : ""}
    ${sec("الكشك والربط", "كود الشركة: " + esc(st.co.code), `<div class="sub">كود شركتك (يعطيه الموظف عند ربط موبايله)</div><div class="code">${esc(st.co.code)}</div>
      <div class="sub" style="margin-top:12px">ابعت للموظف رابط صفحته مع الكود:</div><button class="btn sm" id="cpl" style="margin-top:6px">نسخ رابط الموظفين</button><div style="height:14px"></div><div class="sub">جهاز الباب (الكشك)</div>
      <div class="sub">افتح الرابط على التابلت اللي عند الباب، وسجّل دخولك بحساب الإدارة مرة واحدة لربطه بشركتك، وبعدها يشتغل بالوش فقط.</div>
@@ -1192,6 +1264,8 @@ function tabSet() {
   $("pp_t").onchange = ppSync; ppSync();
   document.querySelectorAll("[data-br]").forEach((r) => (r.onclick = () => branchSheet((st.branches || []).find((b) => b.id === r.dataset.br))));
   $("brAdd").onclick = () => branchSheet(null);
+  $("brPage").onclick = () => branchesPage();
+  if ($("auOpen")) $("auOpen").onclick = () => auditSheet();
   document.querySelectorAll("[data-dv]").forEach((sel) => (sel.onchange = async () => { try { await db(`devices?id=eq.${sel.dataset.dv}`, { method: "PATCH", body: { branch_id: sel.value || null } }); await loadAdmin(); st.tab = "set"; render(); } catch (x) { alert(arabicErr(x)); } }));
   pushInit();
   document.querySelectorAll("#wo .dc").forEach((b) => (b.onclick = () => b.classList.toggle("on")));
