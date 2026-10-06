@@ -245,7 +245,7 @@ async function boot() {
 /* ---------------- ADMIN ---------------- */
 async function loadAdmin() {
   const today0 = new Date(); today0.setHours(0, 0, 0, 0);
-  const [co, set, emps, ses, adv, lv, links, evs, branches, devices, status] = await Promise.all([
+  const [co, set, emps, ses, adv, lv, links, evs, branches, devices, status, zones] = await Promise.all([
     db("companies?select=id,name,code&limit=1"), db("company_settings?select=*&limit=1"),
     db("employees?select=id,full_name,job_title,phone,monthly_salary,shift_start,shift_end,active,user_id,free_absence_days,weekly_off_days,branch_id&order=full_name"),
     db("attendance_sessions?select=employee_id,check_in,check_out&or=(check_out.is.null,check_in.gte." + today0.toISOString() + ")"),
@@ -253,8 +253,17 @@ async function loadAdmin() {
     db("employee_link_requests?select=*&status=eq.pending").catch(() => []),
     db("attendance_events?select=id,employee_id,kind,occurred_at,ai_reason,snapshot_path&ai_verdict=eq.suspicious&order=occurred_at.desc&limit=20").catch(() => []),
     db("branches?select=*&order=name").catch(() => []), db("devices?select=id,name,branch_id,last_seen_at,active&order=name").catch(() => []), rpc("company_status").catch(() => null),
+    db("zone_status?select=employee_id,inside,distance_m,updated_at").catch(() => []),
   ]);
-  Object.assign(st, { co: co[0], set: set[0], emps, sessions: ses, adv, lv, links, flags: evs, branches, devices, status });
+  Object.assign(st, { co: co[0], set: set[0], emps, sessions: ses, adv, lv, links, flags: evs, branches, devices, status, zones });
+  if (!st.zt) st.zt = setInterval(async () => {   // keep the "inside / outside" chips fresh while the Today tab is open
+    if (st.tab !== "today" || !st.set || !st.set.zone_status_enabled || document.hidden || document.querySelector(".ov")) return;
+    try {
+      const t0 = new Date(); t0.setHours(0, 0, 0, 0);
+      const [s2, z2] = await Promise.all([db("attendance_sessions?select=employee_id,check_in,check_out&or=(check_out.is.null,check_in.gte." + t0.toISOString() + ")"), db("zone_status?select=employee_id,inside,distance_m,updated_at")]);
+      st.sessions = s2; st.zones = z2; if (st.tab === "today") tabToday();
+    } catch {}
+  }, 60000);
   render();
 }
 function statusBanner(x) {
@@ -276,6 +285,13 @@ function render() {
   document.querySelectorAll(".tabs button").forEach((b) => (b.onclick = () => { st.tab = b.dataset.t; render(); }));
   ({ today: tabToday, req: tabReq, emp: tabEmp, pay: tabPay, set: tabSet })[st.tab]();
 }
+function zoneChip(e) {
+  if (!st.set || !st.set.zone_status_enabled) return "";
+  const z = (st.zones || []).find((x) => x.employee_id === e.id);
+  const age = z && z.updated_at ? (Date.now() - new Date(z.updated_at)) / 60000 : null;
+  if (!z || z.inside == null || age == null || age > 10) return '<span class="chip c-gray" title="التطبيق مقفول عند الموظف، أو لسه ما وافقش على الشروط، أو مفيش إشارة">الموقع غير معروف</span>';
+  return z.inside ? `<span class="chip c-green">جوه النطاق</span>` : `<span class="chip c-red">برّه النطاق · ${z.distance_m} م</span>`;
+}
 function statusOf(e) {
   const ss = st.sessions.filter((s) => s.employee_id === e.id).sort((a, b) => new Date(b.check_in) - new Date(a.check_in));
   const s = ss[0];
@@ -288,7 +304,7 @@ function tabToday() {
   const act = st.emps.filter((e) => e.active), rows = act.map((e) => ({ e, s: statusOf(e) }));
   const inN = rows.filter((r) => r.s.k === "in").length, ab = rows.filter((r) => r.s.k === "absent").length;
   $("body").innerHTML = `<h1>اليوم</h1><div class="stats"><div class="stat"><span>داخل الآن</span><div>${inN}</div></div><div class="stat"><span>لم يحضر</span><div>${ab}</div></div><div class="stat"><span>تنتظر موافقتك</span><div>${st.adv.length + st.lv.length}</div></div></div>
-   <div class="card">${rows.length ? rows.map(({ e, s }) => `<div class="row" data-v="${e.id}" style="cursor:pointer"><div class="grow"><b>${esc(e.full_name)}</b><small>${esc(s.sub)}</small></div>${s.chip}<button class="btn sm" data-w="${e.id}">إعفاء</button></div>`).join("") : '<div class="sub">لا يوجد موظفون بعد. أضفهم من تبويب الموظفون.</div>'}</div>`;
+   <div class="card">${rows.length ? rows.map(({ e, s }) => `<div class="row" data-v="${e.id}" style="cursor:pointer"><div class="grow"><b>${esc(e.full_name)}</b><small>${esc(s.sub)}</small>${s.k === "in" && zoneChip(e) ? `<div style="margin-top:4px">${zoneChip(e)}</div>` : ""}</div>${s.chip}<button class="btn sm" data-w="${e.id}">إعفاء</button></div>`).join("") : '<div class="sub">لا يوجد موظفون بعد. أضفهم من تبويب الموظفون.</div>'}</div>`;
   document.querySelectorAll("[data-w]").forEach((b) => (b.onclick = (ev) => { ev.stopPropagation(); waiveSheet(b.dataset.w); }));
   document.querySelectorAll("[data-v]").forEach((r) => (r.onclick = () => todaySheet(st.emps.find((x) => x.id === r.dataset.v))));
 }
@@ -577,10 +593,16 @@ function empSheet(e) {
     <label class="row" style="cursor:pointer"><div class="grow"><b>إجازة أسبوعية خاصة بالموظف</b><small>لو مقفولة بياخد إجازة الشركة</small></div><input type="checkbox" id="xo" ${e.weekly_off_days ? "checked" : ""}></label>
     <div class="dchips" id="xw" style="${e.weekly_off_days ? "" : "display:none"}">${DAYS.map((d, i) => `<button type="button" class="dc ${(e.weekly_off_days || []).includes(i) ? "on" : ""}" data-day="${i}">${d}</button>`).join("")}</div>
     <div id="xe" class="err"></div>
+    <div id="xtm" class="sub" style="margin:6px 0"></div>
     <div class="btns"><button class="btn p sm" id="xv">حفظ</button><button class="btn sm" id="xa">سجل الحضور</button></div>
     <div class="btns" style="margin-top:18px"><button class="btn sm" id="xk">${e.active ? "إيقاف الموظف" : "تفعيل الموظف"}</button><button class="btn sm" id="xd" style="color:var(--red)">حذف نهائي</button></div>
     <div class="sub">الإيقاف بيخفي الموظف من الكشك والمرتبات ويحتفظ بسجله. الحذف بيمسح كل بياناته.</div></div>`;
   const q = (id) => o.querySelector(id), er = (m) => (q("#xe").textContent = m), fail = (x) => er(arabicErr(x));
+  db("terms_acceptances?select=version,accepted_at&employee_id=eq." + e.id).then((r) => {
+    const box = q("#xtm"); if (!box || !(st.set && "zone_status_enabled" in st.set)) return;
+    box.innerHTML = r && r[0] ? `وافق على الشروط والأحكام يوم ${shortD(String(r[0].accepted_at).slice(0, 10))} · <a href="#" id="xtr" style="color:inherit;text-decoration:underline">إعادة طلب الموافقة</a>` : "لسه ما وافقش على الشروط والأحكام (مش هيقدر يسجّل بالموقع قبلها).";
+    const b = q("#xtr"); if (b) b.onclick = async (ev) => { ev.preventDefault(); if (!confirm("هيتمسح تسجيل موافقته وحالة موقعه، وهيتطلب منه يوافق من جديد. متأكد؟")) return; try { await rpc("admin_reset_terms", { p_employee: e.id }); er("اتمسحت موافقته."); box.textContent = ""; } catch (x) { fail(x); } };
+  }).catch(() => {});
   q("#xo").onchange = () => (q("#xw").style.display = q("#xo").checked ? "" : "none");
   o.querySelectorAll("#xw .dc").forEach((b) => (b.onclick = () => b.classList.toggle("on")));
   q("#xa").onclick = () => { o.remove(); attSheet(e); };
@@ -606,7 +628,7 @@ async function attSheet(e, pd) {
   const o = overlay();
   let list = [], pay = null, editId = null; const today = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
   const draw = async () => {
-    try { list = await db(`attendance_sessions?select=id,work_date,check_in,check_out&employee_id=eq.${e.id}&work_date=gte.${P.from}&work_date=lte.${P.to}&order=work_date.asc,check_in.asc`); } catch (x) { list = []; }
+    try { list = await db(`attendance_sessions?select=id,work_date,check_in,check_out,closed_by&employee_id=eq.${e.id}&work_date=gte.${P.from}&work_date=lte.${P.to}&order=work_date.asc,check_in.asc`); } catch (x) { list = []; }
     try { const r = await rpc("payroll_month", { p_employee: e.id, p_month: pd }); pay = Array.isArray(r) ? r[0] : r; } catch { pay = null; }
     const [sh, sm] = e.shift_start.split(":").map(Number), grace = (st.set && st.set.late_grace_minutes) || 0;
     const isLate = (s) => { const c = new Date(s.check_in); return c.getHours() * 60 + c.getMinutes() - (sh * 60 + sm) > grace; };
@@ -617,7 +639,7 @@ async function attSheet(e, pd) {
       ${pnav(P, "am")}
       <div class="stats"><div class="stat"><span>أيام حضور</span><div>${days}</div></div><div class="stat"><span>مرات تأخير</span><div>${lates}</div></div><div class="stat"><span>ساعات</span><div>${tot.toFixed(1)}</div></div></div>
       ${pay ? (() => { const t = payTotals(pay); return `<div class="card" style="margin:10px 0;padding:14px 16px"><div class="row" style="min-height:40px"><div class="grow">المرتب الأساسي</div><b>${money(pay.base_pay)} ج.م</b></div><div class="row" style="min-height:40px"><div class="grow">إضافي ومكافآت</div><b>${money(t.extra)}</b></div><div class="row" style="min-height:40px"><div class="grow">خصومات (غياب، تأخير، تأمينات…)</div><b>${money(t.ded)}</b></div><div class="row" style="min-height:40px"><div class="grow">سلف</div><b>${money(pay.advances_deducted)}</b></div><div class="row" style="min-height:44px"><div class="grow"><b>صافي المرتب</b><small>أيام غياب محسوبة: ${Number(pay.absent_days || 0)}</small></div><b style="font-size:20px">${money(pay.net_pay)} ج.م</b></div></div>`; })() : ""}
-      <table class="at" style="margin-top:10px"><tr><th>اليوم</th><th>حضور</th><th>انصراف</th><th></th></tr>${list.map((s) => `<tr><td>${dayAr(s.work_date)}</td><td class="n" style="${isLate(s) ? "color:var(--red)" : ""}">${hhmm(s.check_in)}</td><td class="n">${s.check_out ? hhmm(s.check_out) : "—"}</td><td><button class="btn sm" data-ed="${s.id}">تعديل</button></td></tr>`).join("") || '<tr><td colspan="4" class="sub">لا يوجد حضور في الفترة دي.</td></tr>'}</table>
+      <table class="at" style="margin-top:10px"><tr><th>اليوم</th><th>حضور</th><th>انصراف</th><th></th></tr>${list.map((s) => `<tr><td>${dayAr(s.work_date)}</td><td class="n" style="${isLate(s) ? "color:var(--red)" : ""}">${hhmm(s.check_in)}</td><td class="n">${s.check_out ? hhmm(s.check_out) : "—"}${s.closed_by === "auto" ? '<small style="display:block;color:var(--amber,#b7791f)">اتقفل تلقائي</small>' : ""}</td><td><button class="btn sm" data-ed="${s.id}">تعديل</button></td></tr>`).join("") || '<tr><td colspan="4" class="sub">لا يوجد حضور في الفترة دي.</td></tr>'}</table>
       <h3 style="margin:18px 0 0;font-size:15px">${ed ? "تعديل بصمة" : "إضافة بصمة يدوي"}</h3>
       <label class="f">اليوم<input id="ad" type="date" value="${ed ? ed.work_date : today}"></label>
       <div class="g2k"><label class="f">حضور<input id="ai" type="time" value="${ed ? hmVal(ed.check_in) : e.shift_start.slice(0, 5)}"></label><label class="f">انصراف<input id="ao" type="time" value="${ed && ed.check_out ? hmVal(ed.check_out) : ""}"></label></div>
@@ -983,6 +1005,7 @@ function tabSet() {
      <div class="sub" style="margin:6px 0 4px">جدول الخصم: بعد كام دقيقة تأخير يتخصم كام % من أجر اليوم (سيب الصف فاضي لو مش محتاجه)</div>
      ${[0, 1, 2, 3].map((i) => { const t = (s.late_tiers || [])[i] || {}; return `<div class="row" style="min-height:54px"><span class="sub">بعد</span><input type="number" data-ta="${i}" value="${t.after_min ?? ""}" style="width:80px;text-align:center"><span class="sub">دقيقة</span><span class="grow"></span><input type="number" step="any" data-tp="${i}" value="${t.pct_of_day ?? ""}" style="width:80px;text-align:center"><span class="sub">% من اليوم</span></div>`; }).join("")}`))}
    ${sec("الغياب والانصراف المبكر", onoff(s.absence_deduction_enabled, "يوم بيوم"), `${tg("absence_deduction_enabled", "خصم الغياب")}${tg("early_leave_deduction_enabled", "خصم الانصراف المبكر", "بيتخصم الساعات الناقصة")}` + adv(`${num("absence_deduction_days", "المخصوم عن كل يوم غياب", "يوم", "1 = يوم واحد، 2 = يومين")}${num("absence_penalty_days", "جزاء إضافي على الغياب بدون إذن", "يوم")}`))}
+   ${"auto_close_grace_min" in s ? sec("الانصراف المنسي", s.auto_close_enabled ? "يتقفل تلقائي" : "مقفول", `<div class="sub" style="margin-bottom:6px">لو موظف نسي يسجّل انصراف، النظام بيقفل يومه على ميعاد نهاية شيفته ويتحسب له شيفت كامل بدون إضافي، وبتظهر علامة «اتقفل تلقائي» في سجل حضوره عشان تراجعه. اللي بيسهر ويسجّل انصراف قبل ما تخلص «أقصى مدة تواجد» (في قسم الإضافي) بيتحسب له إضافي عادي. تقدر تعدّل وقت الانصراف من سجل حضوره.</div>${tg("auto_close_enabled", "قفل الانصراف المنسي تلقائي")}${num("auto_close_grace_min", "ينتظر بعد نهاية الشيفت", "دقيقة", "أقل مدة انتظار بعد نهاية الشيفت، والنظام بيستنى كمان لحد أقصى مدة تواجد")}`) : ""}
    ${sec("الإضافي والشغل في الإجازة", onoff(s.overtime_enabled), `${tg("overtime_enabled", "حساب الإضافي")}${num("overtime_day_pct", "زيادة الإضافي النهاري", "%")}${num("overtime_night_pct", "زيادة الإضافي الليلي", "%")}${tg("rest_day_pay_enabled", "أجر الشغل في يوم الإجازة")}${num("rest_day_extra_pct", "الزيادة في يوم الراحة", "%", "100 = يوم الراحة بضعف الأجر")}` + adv(`
      <div class="row"><div class="grow"><b>الليل من</b></div><input type="time" data-t="night_from" value="${(s.night_from || "22:00").slice(0, 5)}" style="width:120px"><span class="sub" style="width:30px;text-align:center">إلى</span><input type="time" data-t="night_to" value="${(s.night_to || "06:00").slice(0, 5)}" style="width:120px"></div>
      ${num("overtime_round_minutes", "تقريب الإضافي (لأقرب)", "دقيقة", "المجموع الشهري بيتقرب لتحت")}${numn("max_presence_hours", "أقصى مدة تواجد في اليوم", "ساعة", "فاضي = بدون حد")}`))}
@@ -1009,6 +1032,7 @@ function tabSet() {
      <div class="sub" style="margin-top:12px"><b>مكان الشغل الافتراضي</b> (افتح الصفحة وانت واقف في مكان الشغل واضغط الزرار)<br>الموظف المرتبط بفرع له موقع بيستخدم موقع فرعه، وغيره بيستخدم المكان ده.</div>
      <div class="g2k"><label class="f">خط العرض<input type="number" step="any" dir="ltr" data-nn="loc_lat" value="${s.loc_lat ?? ""}"></label><label class="f">خط الطول<input type="number" step="any" dir="ltr" data-nn="loc_lng" value="${s.loc_lng ?? ""}"></label></div>
      ${num("loc_radius_m", "النطاق المسموح", "متر", "من 20 إلى 5000، والأفضل 100 إلى 200")}
+     ${"zone_status_enabled" in s ? `<div class="sub" style="margin-top:12px"><b>حالة «جوه/برّه النطاق»</b></div>${tg("zone_status_enabled", "إظهار الحالة للإدارة", "بتشتغل للموظف اللي وافق على الشروط والأحكام. بتظهر وهو مسجّل حضور والتطبيق مفتوح عنده. بنحفظ جوه/برّه ووقت التحديث بس، من غير مكانه ولا مساره.")}` : ""}
      <button type="button" class="btn sm" id="lgps">استخدم موقعي الحالي</button><div class="sub" id="lgm" style="margin-top:6px"></div>`) : ""}
    ${sec("الموظفين على موبايلهم", onoff(s.employee_app_enabled), `<div class="sub" style="margin-bottom:6px">اختياري. الحضور يبقى من الجهاز فقط.</div>
      ${tg("employee_app_enabled", "السماح للموظفين بالدخول من موبايلهم")}${tg("employee_auto_link", "ربط تلقائي إذا تطابق رقم الموبايل", "بدون موافقتك")}${tg("employee_see_salary", "يشوف الموظف مرتبه")}${tg("employee_can_request_advance", "يطلب سلفة")}${tg("employee_can_request_leave", "يطلب إجازة")}`)}
@@ -1048,7 +1072,7 @@ function tabSet() {
     const tiers = [0, 1, 2, 3].map((i) => ({ after_min: document.querySelector(`[data-ta="${i}"]`).value, pct_of_day: document.querySelector(`[data-tp="${i}"]`).value })).filter((t) => t.after_min !== "" && t.pct_of_day !== "").map((t) => ({ after_min: Number(t.after_min), pct_of_day: Number(t.pct_of_day) })).sort((a, b) => a.after_min - b.after_min);
     body.late_tiers = tiers;
     if ($("lmode")) { body.location_punch = $("lmode").value !== "off"; if ("location_require_qr" in st.set) body.location_require_qr = $("lmode").value === "locqr"; }
-    if (body.location_punch && (body.loc_lat == null || body.loc_lng == null) && !(st.branches || []).some((b) => b.active && b.lat != null && b.lng != null)) return setErr("حدد مكان الشغل الأول (استخدم موقعي الحالي) قبل ما تفعّل الحضور بالموقع.");
+    if ((body.location_punch || body.zone_status_enabled) && (body.loc_lat == null || body.loc_lng == null) && !(st.branches || []).some((b) => b.active && b.lat != null && b.lng != null)) return setErr("حدد مكان الشغل الأول (استخدم موقعي الحالي) قبل ما تفعّل الحضور بالموقع.");
     try { await db("company_settings?company_id=eq." + st.co.id, { method: "PATCH", body }); Object.assign(st.set, body); setErr("تم الحفظ ✓", true); } catch (e) { setErr(arabicErr(e)); }
   };
 }
@@ -1059,6 +1083,9 @@ async function loadEmployee() {
     const me = await rpc("my_employee"); st.status = await rpc("company_status").catch(() => null);
     if (!me || !me[0]) { view(`<div class="wrap"><div class="top">${LOGO}<button class="btn sm" id="out">خروج</button></div><h1>غير متاح الآن</h1><div class="sub">الشركة أوقفت دخول الموظفين من الموبايل.</div></div>`); $("out").onclick = logout; return; }
     st.mine = me[0];
+    const ts = await rpc("terms_state").catch(() => null);   // null = terms not installed yet (older database): don't block
+    if (ts && (!ts.accepted || ts.version !== TERMS_VERSION)) return termsScreen(st.mine);
+    st.ts = ts;
     const [pay, adv, lv, ses] = await Promise.all([
       st.mine.can_see_salary ? rpc("my_payroll", { p_month: st.month }).catch(() => null) : null,
       db("advances?select=*&order=created_at.desc&limit=8"), db("leave_requests?select=*&order=created_at.desc&limit=8"),
@@ -1113,6 +1140,54 @@ function scanSheet() {
     })();
   });
 }
+let zoneTimer = null, zoneVis = null;
+function zoneStop() { if (zoneTimer) { clearInterval(zoneTimer); zoneTimer = null; } if (zoneVis) { document.removeEventListener("visibilitychange", zoneVis); zoneVis = null; } }
+// "inside / outside the work zone" for the admin: covered by the terms the employee accepted; only while checked in with the app open
+function zoneSetup(open) {
+  zoneStop(); const ts = st.ts, zc = $("zcard"); if (!zc || !ts || !ts.zone_enabled || !open) return;
+  zc.innerHTML = `<div class="card" style="padding:6px 20px"><div class="row"><div class="grow"><b>حالة موقعك للإدارة</b><small id="zt">جاري التحديد…</small></div><span id="zchip" class="chip c-gray">—</span></div><div class="sub" style="padding:0 0 8px;font-size:13px">الإدارة بتشوف جوه/برّه نطاق الشغل بس، طول ما إنت مسجّل حضور والتطبيق مفتوح، حسب الشروط اللي وافقت عليها. مفيش تتبع لمسارك.</div></div>`;
+  const upd = (r, err) => {
+    const t = $("zt"), c = $("zchip"); if (!t || !c) return;
+    if (r && r.inside != null) { c.className = "chip " + (r.inside ? "c-green" : "c-red"); c.textContent = r.inside ? "جوه النطاق" : "برّه النطاق"; t.textContent = "آخر تحديث " + hhmm(new Date().toISOString()); }
+    else { c.className = "chip c-gray"; c.textContent = "—"; t.textContent = err || (r && r.skipped === "weak" ? "إشارة الموقع ضعيفة، هنحاول تاني" : "جاري التحديد…"); }
+  };
+  const go = async () => { try { const p = await getPos(); upd(await rpc("report_zone", { p_lat: p.lat, p_lng: p.lng, p_accuracy: p.acc })); } catch (e) { upd(null, e.message); } };
+  go(); zoneTimer = setInterval(() => { if (!document.hidden) go(); }, 120000);
+  zoneVis = () => { if (!document.hidden) go(); }; document.addEventListener("visibilitychange", zoneVis);
+}
+const TERMS_VERSION = "2026-10-06";
+function termsScreen(m) {
+  const co = esc(m.company_name || "الشركة");
+  view(`<div class="wrap"><div class="top">${LOGO}<button class="btn sm" id="out">خروج</button></div>
+   <h1>الشروط والأحكام</h1><div class="sub" style="margin:-4px 0 10px">اقرأ الشروط دي للآخر قبل ما تكمل.</div>
+   <div class="card" style="padding:14px 18px;line-height:1.95;font-size:15px">
+    <b>١. مين بيستخدم بياناتك؟</b><br>تطبيق الحضور والمرتبات بتاع <b>${co}</b>، وبيشتغل على منصة Mogzy.<br><br>
+    <b>٢. إيه البيانات اللي بنستخدمها؟</b><br>
+    • <b>بصمة الوجه (Face ID):</b> لما تسجّل حضورك على جهاز الباب بنحوّل وجهك لقالب رقمي (أرقام) للمطابقة مش صورة. وفي حالات الاشتباه ممكن تتحفظ لقطة مؤقتة للمراجعة.<br>
+    • <b>الموقع:</b> لحظة تسجيل حضورك أو انصرافك من التطبيق، عشان نتأكد إنك في نطاق الشغل. ولو الإدارة فعّلت «حالة النطاق»، بيظهر لها <b>جوه ولا برّه النطاق</b> طول ما إنت مسجّل حضور والتطبيق مفتوح. ومش بنحفظ مسارك ولا الأماكن اللي رحتها.<br>
+    • <b>كود الباب (QR):</b> عشان نتأكد إنك قدام جهاز الباب وقت التسجيل.<br>
+    • بيانات الحضور والانصراف والمرتب والسلف والإجازات.<br><br>
+    <b>٣. ليه؟</b><br>لتسجيل الحضور وحساب مرتبك بس. مش بنستخدمها في إعلانات ومش بنبيعها.<br><br>
+    <b>٤. مين يشوفها؟</b><br>إدارة الشركة اللي ليها صلاحية، ومزوّد المنصة للتشغيل والدعم الفني بس.<br><br>
+    <b>٥. الحفظ والأمان؟</b><br>البيانات محفوظة على خوادم مؤمّنة ومحمية بصلاحيات، وبتفضل طول فترة شغلك وبعدها حسب سياسة الشركة والقانون.<br><br>
+    <b>٦. حقوقك</b><br>تقدر تطلب من إدارة الشركة الاطلاع على بياناتك أو تصحيحها أو حذفها، حسب قانون حماية البيانات الشخصية المصري رقم ١٥١ لسنة ٢٠٢٠.<br><br>
+    <b>٧. الموافقة</b><br>بالضغط على «أوافق» إنت بتؤكد موافقتك الحرة على البنود دي. الموافقة بتتسجل بتاريخها، ومش بيتغيّر فيها حاجة من داخل التطبيق.</div>
+   <div class="card" style="padding:6px 18px;margin-top:12px">
+    <label class="row" style="cursor:pointer"><div class="grow"><b>أوافق على استخدام بصمة وجهي (Face ID) لتسجيل الحضور</b></div><input type="checkbox" id="tf"></label>
+    <label class="row" style="cursor:pointer"><div class="grow"><b>أوافق على استخدام موقعي زي ما هو موضّح</b></div><input type="checkbox" id="tl"></label>
+    <label class="row" style="cursor:pointer"><div class="grow"><b>قرأت الشروط والأحكام وأوافق عليها</b></div><input type="checkbox" id="tt"></label></div>
+   <div id="te" class="err"></div>
+   <button class="btn p full" id="ty" disabled style="margin-top:8px">أوافق وأكمل</button>
+   <button class="btn full" id="tn" style="margin:8px 0 24px">لا أوافق</button></div>`);
+  const chk = ["tf", "tl", "tt"], upd = () => ($("ty").disabled = !chk.every((i) => $(i).checked));
+  chk.forEach((i) => ($(i).onchange = upd)); $("out").onclick = logout;
+  $("tn").onclick = () => { $("te").textContent = "من غير الموافقة مش هتقدر تستخدم التطبيق. لسه تقدر تسجّل حضورك بوجهك على جهاز الباب."; };
+  $("ty").onclick = async () => {
+    $("ty").disabled = true;
+    try { await rpc("accept_terms", { p_version: TERMS_VERSION, p_face: true, p_location: true }); loadEmployee(); }
+    catch (e) { $("te").textContent = arabicErr(e); upd(); }
+  };
+}
 function renderEmployee(pay, adv, lv, ses) {
   const m = st.mine, nm = m.full_name.split(" ")[0], row = (l, v, c = "") => `<div class="row" style="min-height:48px"><div class="grow">${l}</div><b style="${c}">${v}</b></div>`;
   const sameDay = (iso) => new Date(iso).toDateString() === new Date().toDateString();
@@ -1125,12 +1200,14 @@ function renderEmployee(pay, adv, lv, ses) {
    <div class="sub">أهلاً</div><h1>${esc(nm)} · ${esc(m.company_name)}</h1>${statusBanner(st.status)}
    ${pay ? `<div class="net clk" id="netc" role="button" tabindex="0"><small>صافي مرتبك حتى اليوم${P ? " · " + P : ""}</small><div>${money(pay.net_pay)} <span style="font-size:20px">ج.م</span></div><small style="display:block;margin-top:6px;opacity:.8">اضغط للتفاصيل ›</small></div>` : ""}
    <div class="card" style="padding:6px 20px"><div class="row"><div class="grow"><b>اليوم</b><small>${stateTxt}</small></div><span class="chip ${td ? (td.check_out ? "c-gray" : "c-green") : "c-amber"}">${td ? (td.check_out ? "انتهى" : "داخل") : "—"}</span></div>${m.location_punch ? `<button class="btn p full" id="lp" style="margin:4px 0 8px">${open ? "تسجيل انصراف بالموقع" : "تسجيل حضور بالموقع"}</button><div id="lpm" class="err${st.flash ? " ok" : ""}" style="margin:0 0 8px;min-height:0">${st.flash || ""}</div>` : ""}</div>
+   <div id="zcard"></div>
    ${m.can_request_advance || m.can_request_leave ? `<div class="qa">${m.can_request_advance ? '<button class="btn p" id="qadv">طلب سلفة</button>' : ""}${m.can_request_leave ? '<button class="btn p" id="qlv">طلب إجازة</button>' : ""}</div>` : ""}
    <div class="card" style="padding:6px 20px"><div class="row" style="min-height:40px"><div class="grow"><b>طلباتي</b></div>${pending ? `<span class="chip c-amber">${pending} بانتظار الموافقة</span>` : ""}</div>${reqs.slice(0, 2).map(reqRow).join("") || '<div class="sub" style="padding:10px 0">لا توجد طلبات.</div>'}${reqs.length > 2 ? '<button class="btn sm full" id="allr" style="margin:6px 0 10px">كل الطلبات (' + reqs.length + ")</button>" : ""}</div>
    <button class="btn full" id="hist">سجل حضوري</button>
    <div class="note" style="margin-top:14px">${m.location_punch ? "الحضور والانصراف يتسجلان بوجهك من الجهاز عند الباب، أو بموقعك من هنا وأنت في نطاق الشغل. بنقرأ موقعك لحظة الضغط على الزرار فقط." : "الحضور والانصراف يتسجلان بوجهك من الجهاز عند الباب فقط."}</div></div>`);
   st.flash = null; $("out").onclick = logout;
   const sheet = (html) => { const ov = overlay(); ov.innerHTML = `<div class="sheet"><button type="button" class="xclose" aria-label="إغلاق">✕</button>${html}</div>`; return ov; };
+  zoneSetup(!!open);
   if ($("lp")) $("lp").onclick = async () => {
     const b = $("lp"), lab = b.textContent, msg = (t) => { const e = $("lpm"); if (e) { e.className = "err"; e.textContent = t; } }, reset = () => { b.disabled = false; b.textContent = lab; };
     b.disabled = true; b.textContent = "جاري تحديد موقعك…"; msg("");
