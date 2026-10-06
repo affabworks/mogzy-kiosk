@@ -39,6 +39,7 @@ input[type=date],input[type=time],input[type=month]{-webkit-appearance:none;appe
 .btns{display:flex;gap:10px;margin:0 0 12px}.sheet .btns{margin:22px 0 0}.clk{cursor:pointer}.clk:active{background:var(--soft)}
 .ov{position:fixed;inset:0;background:rgba(31,27,23,.55);display:grid;place-items:center;z-index:90;padding:16px}.sheet{background:var(--surface);border-radius:20px;padding:20px;max-width:420px;width:100%;max-height:90vh;overflow:auto}
 .ps .nt{font-size:13px;color:var(--mute);line-height:1.9;margin:10px 0}.strip{display:grid;grid-template-columns:repeat(5,1fr);border:1px solid #cfc7ba;border-radius:12px;overflow:hidden;margin:10px 0 14px}.strip>div{padding:8px 4px;text-align:center;border-left:1px solid #cfc7ba}.strip>div:last-child{border-left:0}.strip span{display:block;font-size:12px;color:var(--mute)}.strip b{font-size:15px}.strip .r b{color:var(--red)}.strip .net{background:var(--ink)}.strip .net span,.strip .net b{color:#fff}
+.scanbox{margin:10px 0;border-radius:16px;overflow:hidden;background:#000;aspect-ratio:4/3}.scanbox video{width:100%;height:100%;object-fit:cover;display:block}
 .qa{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:14px 0}.qa .btn{min-height:56px;font-size:17px}.qa .btn:only-child{grid-column:1/-1}.net.clk:active{opacity:.92}
 .ps table.cal{width:100%;border-collapse:collapse;font-size:13px}.ps table.cal th{background:var(--ink);color:#fff;font-weight:600;font-size:12.5px;padding:7px 4px;border:1px solid var(--ink)}.ps table.cal td{border:1px solid #d9d2c7;padding:6px 4px;text-align:center}.ps table.cal td.dy,.ps table.cal td.nt2{text-align:right}.ps table.cal td.dy{white-space:nowrap;font-weight:500}.ps table.cal td.nt2{min-width:96px;font-size:12px}.ps table.cal td{padding:6px 3px}.ps table.cal tr.mu td{color:#a39a8d;background:#f6f3ee}.ps table.cal tr.bad td{background:#fdf1ef}.ps table.cal tr.bad td:nth-child(5){color:var(--red);font-weight:700}.ps table.cal tr.good td:nth-child(6){color:#2f7d4f;font-weight:700}.ps table.cal tr.tt td{font-weight:700;background:#efeae1}
 @media print{#pa .strip{border-color:#888}#pa .strip>div{border-color:#888}#pa .strip .net{background:#222;-webkit-print-color-adjust:exact;print-color-adjust:exact}#pa table.cal th{background:#222!important;color:#fff!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;border-color:#222}#pa table.cal td{padding:2px 4px;font-size:11px;border:1px solid #999;text-align:center}#pa table.cal td.dy,#pa table.cal td.nt2{text-align:right}#pa table.cal tr.mu td{background:#f1f1f1!important}#pa .nt{font-size:11px}}
@@ -100,6 +101,10 @@ const ICON = {
   clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
 };
 const INVITE = (new URLSearchParams(location.search).get("code") || "").toUpperCase();
+/* door QR: the kiosk shows a code that opens employee.html?q=CODE; keep it briefly (survives the login step), never in the address bar */
+try { const u = new URL(location.href), qv = u.searchParams.get("q"); if (qv) { sessionStorage.setItem("mogzy.q", JSON.stringify({ c: qv, t: Date.now() })); u.searchParams.delete("q"); history.replaceState(null, "", u.pathname + u.search + u.hash); } } catch {}
+const getQR = () => { try { const o = JSON.parse(sessionStorage.getItem("mogzy.q") || "null"); return o && Date.now() - o.t < 85000 ? o.c : null; } catch { return null; } };
+const clearQR = () => { try { sessionStorage.removeItem("mogzy.q"); } catch {} };
 const LOGO = '<img src="logo.png" alt="Mogzy">';
 
 /* ---------------- REST helpers (the user's own login token; RLS does the protecting) ---------------- */
@@ -135,7 +140,7 @@ const arabicErr = (e) => {
 };
 
 /* ---------------- state ---------------- */
-const st = { flash: null, me: null, co: null, set: null, emps: [], sessions: [], adv: [], lv: [], links: [], pay: [], tab: "today", month: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10), mine: null, status: null };
+const st = { flash: null, qrAuto: false, me: null, co: null, set: null, emps: [], sessions: [], adv: [], lv: [], links: [], pay: [], tab: "today", month: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10), mine: null, status: null };
 const view = (html) => { $("app").innerHTML = html; };
 const val = (id) => ($(id) ? $(id).value.trim() : "");
 const setErr = (m, ok) => { const e = $("err"); if (e) { e.textContent = m || ""; e.className = "err" + (ok ? " ok" : ""); } };
@@ -997,12 +1002,14 @@ function tabSet() {
      ${(st.branches || []).map((b) => `<div class="row clk" data-br="${b.id}"><div class="grow"><b>${esc(b.name)}</b><small>${st.emps.filter((e) => e.branch_id === b.id).length} موظف${b.active ? "" : " · موقوف"}</small></div></div>`).join("")}
      <button type="button" class="btn sm" id="brAdd" style="margin-top:8px">＋ فرع جديد</button>
      ${(st.devices || []).length && (st.branches || []).length ? `<div class="sub" style="margin-top:14px">أجهزة الكشك (اختار الفرع لكل جهاز):</div>${st.devices.map((d) => `<div class="row"><div class="grow"><b>${esc(d.name)}</b></div><select data-dv="${d.id}" style="height:40px;width:auto;font-size:14px;padding:0 8px"><option value="">كل الفروع</option>${st.branches.map((b) => `<option value="${b.id}" ${d.branch_id === b.id ? "selected" : ""}>${esc(b.name)}</option>`).join("")}</select></div>`).join("")}` : ""}`)}
-   ${"location_punch" in s ? sec("الحضور بالموقع", onoff(s.location_punch), `<div class="sub" style="margin-bottom:6px">الموظف يسجّل حضوره وانصرافه من موبايله وهو داخل نطاق الشغل، وبنقرأ موقعه لحظة الضغط فقط. الحضور بالوش على جهاز الباب يفضل شغال زي ما هو.</div>
-     ${tg("location_punch", "السماح بالحضور بالموقع")}${s.employee_app_enabled ? "" : '<div class="note" style="margin:8px 0">لازم تفعّل «السماح للموظفين بالدخول من موبايلهم» تحت عشان الموظف يقدر يسجّل.</div>'}
-     <div class="sub" style="margin-top:12px"><b>مكان الشغل الافتراضي</b><br>الموظف المرتبط بفرع له موقع بيستخدم موقع فرعه، وغيره بيستخدم المكان ده.</div>
+   ${"location_punch" in s ? sec("الحضور بالموقع", s.location_punch ? (s.location_require_qr ? "موقع + كود" : "بالموقع") : "مقفول", `<div class="sub" style="margin-bottom:6px">الموظف يسجّل حضوره وانصرافه من موبايله وهو داخل نطاق الشغل، وبنقرأ موقعه لحظة الضغط فقط. الحضور بالوش على جهاز الباب يفضل شغال زي ما هو.</div>
+     <label class="f" style="margin-top:6px">الحضور من موبايل الموظف<select id="lmode"><option value="off" ${!s.location_punch ? "selected" : ""}>مقفول</option><option value="loc" ${s.location_punch && !s.location_require_qr ? "selected" : ""}>بالموقع فقط</option>${"location_require_qr" in s ? `<option value="locqr" ${s.location_punch && s.location_require_qr ? "selected" : ""}>بالموقع + كود الباب</option>` : ""}</select></label>
+     <div class="sub" style="font-size:13px;margin-bottom:6px">«بالموقع فقط»: يسجّل لو موبايله داخل نطاق الشغل. «بالموقع + كود الباب»: بعد ما الموقع يتأكد تتفتح الكاميرا ويمسح الكود المتغيّر الظاهر على شاشة جهاز الباب (أمان أعلى، ومحتاج جهاز الباب أونلاين).</div>
+     ${s.employee_app_enabled ? "" : '<div class="note" style="margin:8px 0">لازم تفعّل «السماح للموظفين بالدخول من موبايلهم» تحت عشان الموظف يقدر يسجّل.</div>'}
+     <div class="sub" style="margin-top:12px"><b>مكان الشغل الافتراضي</b> (افتح الصفحة وانت واقف في مكان الشغل واضغط الزرار)<br>الموظف المرتبط بفرع له موقع بيستخدم موقع فرعه، وغيره بيستخدم المكان ده.</div>
      <div class="g2k"><label class="f">خط العرض<input type="number" step="any" dir="ltr" data-nn="loc_lat" value="${s.loc_lat ?? ""}"></label><label class="f">خط الطول<input type="number" step="any" dir="ltr" data-nn="loc_lng" value="${s.loc_lng ?? ""}"></label></div>
      ${num("loc_radius_m", "النطاق المسموح", "متر", "من 20 إلى 5000، والأفضل 100 إلى 200")}
-     <button type="button" class="btn sm" id="lgps">استخدم موقعي الحالي (وانت في مكان الشغل)</button><div class="sub" id="lgm" style="margin-top:6px"></div>`) : ""}
+     <button type="button" class="btn sm" id="lgps">استخدم موقعي الحالي</button><div class="sub" id="lgm" style="margin-top:6px"></div>`) : ""}
    ${sec("الموظفين على موبايلهم", onoff(s.employee_app_enabled), `<div class="sub" style="margin-bottom:6px">اختياري. الحضور يبقى من الجهاز فقط.</div>
      ${tg("employee_app_enabled", "السماح للموظفين بالدخول من موبايلهم")}${tg("employee_auto_link", "ربط تلقائي إذا تطابق رقم الموبايل", "بدون موافقتك")}${tg("employee_see_salary", "يشوف الموظف مرتبه")}${tg("employee_can_request_advance", "يطلب سلفة")}${tg("employee_can_request_leave", "يطلب إجازة")}`)}
    ${sec("الإشعارات", '<span id="pst">...</span>', `<div class="sub" style="margin-bottom:8px">يوصلك إشعار على الموبايل لما موظف يطلب سلفة أو إجازة. فعّله على كل جهاز عايز الإشعار عليه.</div><button class="btn p sm" id="pn">تفعيل الإشعارات على الجهاز ده</button><div id="pne" class="sub" style="margin-top:8px"></div>`)}
@@ -1040,6 +1047,7 @@ function tabSet() {
     body.weekly_off_days = [...document.querySelectorAll("#wo .dc.on")].map((b) => Number(b.dataset.day));
     const tiers = [0, 1, 2, 3].map((i) => ({ after_min: document.querySelector(`[data-ta="${i}"]`).value, pct_of_day: document.querySelector(`[data-tp="${i}"]`).value })).filter((t) => t.after_min !== "" && t.pct_of_day !== "").map((t) => ({ after_min: Number(t.after_min), pct_of_day: Number(t.pct_of_day) })).sort((a, b) => a.after_min - b.after_min);
     body.late_tiers = tiers;
+    if ($("lmode")) { body.location_punch = $("lmode").value !== "off"; if ("location_require_qr" in st.set) body.location_require_qr = $("lmode").value === "locqr"; }
     if (body.location_punch && (body.loc_lat == null || body.loc_lng == null) && !(st.branches || []).some((b) => b.active && b.lat != null && b.lng != null)) return setErr("حدد مكان الشغل الأول (استخدم موقعي الحالي) قبل ما تفعّل الحضور بالموقع.");
     try { await db("company_settings?company_id=eq." + st.co.id, { method: "PATCH", body }); Object.assign(st.set, body); setErr("تم الحفظ ✓", true); } catch (e) { setErr(arabicErr(e)); }
   };
@@ -1060,6 +1068,51 @@ async function loadEmployee() {
   } catch (e) { view(`<div class="wrap"><div class="err">${esc(arabicErr(e))}</div></div>`); }
 }
 const stChip = (s) => `<span class="chip ${s === "approved" ? "c-green" : s === "rejected" ? "c-red" : "c-amber"}">${s === "approved" ? "تمت الموافقة" : s === "rejected" ? "مرفوض" : "بانتظار الموافقة"}</span>`;
+const getPos = () => new Promise((res, rej) => {
+  if (!navigator.geolocation) return rej(new Error("المتصفح مش بيدعم تحديد الموقع."));
+  navigator.geolocation.getCurrentPosition((p) => res({ lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy || 0 }),
+    (er) => rej(new Error(er && er.code === 1 ? "اسمح للمتصفح بالوصول لموقعك من إعدادات الموبايل وجرّب تاني." : "تعذر تحديد موقعك، جرّب في مكان مفتوح.")), { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
+});
+const loadScript = (src) => new Promise((res, rej) => { const t = document.createElement("script"); t.src = src; t.onload = res; t.onerror = () => rej(new Error("تعذر تحميل ماسح الكود")); document.head.appendChild(t); });
+const codeFrom = (txt) => { txt = String(txt || "").trim(); try { const q = new URL(txt).searchParams.get("q"); if (q && /^[0-9a-f]{6,20}$/i.test(q)) return q.toLowerCase(); } catch {} const raw = txt.replace(/[\s-]/g, "").toLowerCase(); return /^[0-9a-f]{10}$/.test(raw) ? raw : null; };
+/* in-page camera scanner for the door code. Resolves with the code, or null if the employee closes it. */
+function scanSheet() {
+  return new Promise((resolve) => {
+    const ov = overlay(); let stream = null, alive = true, done = false;
+    const finish = (c) => { if (done) return; done = true; alive = false; try { stream && stream.getTracks().forEach((t) => t.stop()); } catch {} ov.remove(); resolve(c); };
+    ov._onclose = () => finish(null);
+    ov.innerHTML = `<div class="sheet"><button type="button" class="xclose" aria-label="إغلاق">✕</button><h2>امسح كود الباب</h2>
+      <div class="sub" style="color:var(--green)">الموقع تمام ✓</div><div class="sub">وجّه الكاميرا على الكود الظاهر على شاشة جهاز الباب.</div>
+      <div class="scanbox"><video id="scv" playsinline muted autoplay></video></div><div id="scm" class="err" style="min-height:22px"></div>
+      <details class="adv"><summary>الكاميرا مش شغالة؟ اكتب الكود</summary><label class="f">الكود المكتوب تحت الـ QR على شاشة الباب<input id="scc" dir="ltr" autocapitalize="off" autocomplete="off" placeholder="7d2a6 af832"></label><div class="btns"><button class="btn p sm" id="scb">تأكيد</button></div></details></div>`;
+    const q = (id) => ov.querySelector(id), say = (t) => (q("#scm").textContent = t);
+    q("#scb").onclick = () => { const c = codeFrom(q("#scc").value); if (c) finish(c); else say("الكود غلط، لازم 10 حروف وأرقام."); };
+    (async () => {
+      try {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error("x");
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
+        if (!alive) return stream.getTracks().forEach((t) => t.stop());
+        const v = q("#scv"); v.srcObject = stream; await v.play().catch(() => {});
+        let det = null; if (window.BarcodeDetector) { try { det = new BarcodeDetector({ formats: ["qr_code"] }); } catch {} }
+        if (!det) await loadScript("qrdec.js");
+        const cv = document.createElement("canvas"), cx = cv.getContext("2d", { willReadFrequently: true });
+        const tick = async () => {
+          if (!alive) return;
+          try {
+            if (v.readyState >= 2 && v.videoWidth) {
+              let txt = null;
+              if (det) { const r = await det.detect(v); if (r && r[0]) txt = r[0].rawValue; }
+              else { const sc = Math.min(1, 800 / v.videoWidth); cv.width = Math.round(v.videoWidth * sc); cv.height = Math.round(v.videoHeight * sc); cx.drawImage(v, 0, 0, cv.width, cv.height); txt = window.mogzyQRDecode(cx.getImageData(0, 0, cv.width, cv.height)); }
+              const c = codeFrom(txt); if (c) return finish(c);
+            }
+          } catch {}
+          setTimeout(tick, det ? 150 : 120);
+        };
+        tick();
+      } catch (e) { say("تعذر فتح الكاميرا. اسمح للمتصفح باستخدامها، أو اكتب الكود بالأسفل."); }
+    })();
+  });
+}
 function renderEmployee(pay, adv, lv, ses) {
   const m = st.mine, nm = m.full_name.split(" ")[0], row = (l, v, c = "") => `<div class="row" style="min-height:48px"><div class="grow">${l}</div><b style="${c}">${v}</b></div>`;
   const sameDay = (iso) => new Date(iso).toDateString() === new Date().toDateString();
@@ -1078,15 +1131,25 @@ function renderEmployee(pay, adv, lv, ses) {
    <div class="note" style="margin-top:14px">${m.location_punch ? "الحضور والانصراف يتسجلان بوجهك من الجهاز عند الباب، أو بموقعك من هنا وأنت في نطاق الشغل. بنقرأ موقعك لحظة الضغط على الزرار فقط." : "الحضور والانصراف يتسجلان بوجهك من الجهاز عند الباب فقط."}</div></div>`);
   st.flash = null; $("out").onclick = logout;
   const sheet = (html) => { const ov = overlay(); ov.innerHTML = `<div class="sheet"><button type="button" class="xclose" aria-label="إغلاق">✕</button>${html}</div>`; return ov; };
-  if ($("lp")) $("lp").onclick = () => {
-    const b = $("lp"), lab = b.textContent, msg = (t) => { const e = $("lpm"); if (e) { e.className = "err"; e.textContent = t; } };
-    if (!navigator.geolocation) return msg("المتصفح مش بيدعم تحديد الموقع.");
+  if ($("lp")) $("lp").onclick = async () => {
+    const b = $("lp"), lab = b.textContent, msg = (t) => { const e = $("lpm"); if (e) { e.className = "err"; e.textContent = t; } }, reset = () => { b.disabled = false; b.textContent = lab; };
     b.disabled = true; b.textContent = "جاري تحديد موقعك…"; msg("");
-    navigator.geolocation.getCurrentPosition(async (pos) => {
-      try { const r = await rpc("punch_by_location", { p_lat: pos.coords.latitude, p_lng: pos.coords.longitude, p_accuracy: pos.coords.accuracy || 0 }); st.flash = r.kind === "in" ? "تم تسجيل حضورك ✓" : "تم تسجيل انصرافك ✓"; loadEmployee(); }
-      catch (e) { b.disabled = false; b.textContent = lab; msg(arabicErr(e)); }
-    }, (er) => { b.disabled = false; b.textContent = lab; msg(er && er.code === 1 ? "اسمح للمتصفح بالوصول لموقعك من إعدادات الموبايل وجرّب تاني." : "تعذر تحديد موقعك، جرّب في مكان مفتوح."); }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
+    try {
+      const pos = await getPos(); let qr = null;
+      if (m.location_require_qr) {
+        qr = getQR();   // already scanned with the phone camera (link) -> no scanner needed
+        if (!qr) {
+          await rpc("check_location", { p_lat: pos.lat, p_lng: pos.lng, p_accuracy: pos.acc });   // location first: wrong place = stop here
+          b.textContent = "جاري فتح الكاميرا…"; qr = await scanSheet();
+          if (!qr) return reset();
+          b.textContent = "جاري التسجيل…";
+        }
+      }
+      const r = await rpc("punch_by_location", { p_lat: pos.lat, p_lng: pos.lng, p_accuracy: pos.acc, p_qr: qr }); clearQR();
+      st.flash = r.kind === "in" ? "تم تسجيل حضورك ✓" : "تم تسجيل انصرافك ✓"; loadEmployee();
+    } catch (e) { reset(); msg(arabicErr(e)); }
   };
+  if ($("lp") && m.location_require_qr && getQR() && !st.qrAuto) { st.qrAuto = true; setTimeout(() => $("lp") && $("lp").click(), 400); }
   if ($("netc")) $("netc").onclick = () => { const t = payTotals(pay), d = Number(pay.absence_deduction) + Number(pay.late_deduction) + Number(pay.early_leave_deduction), o2 = Number(pay.deductions) + Number(pay.penalties_applied), ti = Number(pay.insurance) + Number(pay.income_tax);
     sheet(`<h2>تفاصيل المرتب</h2><div class="sub">${P}</div><div class="card" style="margin:10px 0;padding:6px 16px">${row("الأجر الأساسي", money(pay.base_pay) + " ج.م")}${Number(pay.overtime_pay) + Number(pay.rest_day_pay) ? row("إضافي وأيام راحة", "+ " + money(Number(pay.overtime_pay) + Number(pay.rest_day_pay)) + " ج.م", "color:var(--green)") : ""}${Number(pay.bonuses) ? row("مكافآت", "+ " + money(pay.bonuses) + " ج.م", "color:var(--green)") : ""}${d ? row("تأخير وغياب", "- " + money(d) + " ج.م", "color:var(--red)") : ""}${o2 ? row("خصومات وجزاءات", "- " + money(o2) + " ج.م", "color:var(--red)") : ""}${ti ? row("تأمين وضريبة", "- " + money(ti) + " ج.م", "color:var(--red)") : ""}${Number(pay.advances_deducted) ? row("سلفة تُخصم", "- " + money(pay.advances_deducted) + " ج.م", "color:var(--red)") : ""}${row("<b>الصافي</b>", "<b>" + money(pay.net_pay) + " ج.م</b>")}</div><div class="sub" style="font-size:13px">الرقم حتى اليوم وقد يتغير حتى نهاية الفترة.</div>`); };
   if ($("qadv")) $("qadv").onclick = () => { const ov = sheet(`<h2>طلب سلفة</h2><label class="f">المبلغ (ج.م)<input id="aa" type="number" inputmode="numeric" autofocus></label><div id="err" class="err"></div><div class="btns"><button class="btn p full" id="as">إرسال الطلب</button></div>`);

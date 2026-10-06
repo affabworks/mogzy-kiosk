@@ -92,6 +92,17 @@ async function sync() {
   } catch (e) { netBadge(false); }
 }
 
+/* ---------- door QR for phone check-ins (shown only when the company enabled it) ---------- */
+async function qrTick() {
+  const box = $("qrbox"); if (!box || !window.mogzyQR) return;
+  try {
+    if (!navigator.onLine) throw 0;
+    const d = await api("qr");
+    if (!d || !d.code) throw 0;
+    $("qrimg").innerHTML = window.mogzyQR.svg(new URL("employee.html", location.href).href + "?q=" + d.code, 2); $("qrcode").textContent = d.code.slice(0, 5) + " " + d.code.slice(5); box.style.display = "";
+  } catch { box.style.display = "none"; }
+}
+
 /* ---------- camera & models ---------- */
 async function startCam(el) {
   if (!stream) stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user", width: 640, height: 480 }, audio: false });
@@ -432,6 +443,7 @@ $("ad-save").onclick = async () => {
   } catch (e) { $("loadmsg").textContent = "تعذر تشغيل الكاميرا: اسمح للمتصفح باستخدامها ثم أعد التحميل."; console.error(e); return; }
   netBadge(navigator.onLine); await sync(); tickClock(); show("scan"); resumeScan();
   setInterval(sync, 60000);
+  qrTick(); setInterval(qrTick, 45000);
   addEventListener("online", sync); addEventListener("offline", () => netBadge(false));
 })();
 })();

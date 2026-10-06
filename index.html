@@ -35,6 +35,7 @@ h1{font-size:clamp(24px,4vw,32px);margin:0;font-weight:600;letter-spacing:-.2px}
 .btn:active{transform:scale(.98)}
 /* scan */
 .scanwrap{flex:1 0 auto;display:flex;align-items:center;justify-content:center;gap:clamp(32px,6vw,72px)}
+.qrbox{display:flex;align-items:center;gap:14px;margin-top:18px;padding:12px 14px;background:var(--surface);border:1px solid var(--line);border-radius:18px;max-width:340px}.qrimg{width:116px;height:116px;flex:none;border-radius:8px;overflow:hidden;background:#fff}.qrimg svg{width:100%;height:100%;display:block}.qrtxt{display:flex;flex-direction:column;gap:4px;font-size:14px;color:var(--mute);line-height:1.5}.qrtxt b{color:var(--ink);font-size:16px}.qrcode{font-family:ui-monospace,Menlo,monospace;font-size:18px;letter-spacing:2px;color:var(--ink)}
 .cam{position:relative;width:min(100%,560px);aspect-ratio:4/3;max-height:64vh;border-radius:28px;overflow:hidden;background:#2A2622;box-shadow:var(--shadow);flex-shrink:0}
 .cam video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
 .oval{position:absolute;left:50%;top:50%;width:52%;height:84%;transform:translate(-50%,-50%);border:2px dashed rgba(255,255,255,.7);border-radius:50%;transition:border-color .2s}
@@ -142,6 +143,7 @@ img{-webkit-touch-callout:none;-webkit-user-drag:none}
       <div class="clock" id="clock">--:--</div><div class="date" id="date"></div>
       <div class="status" id="status">قف أمام الكاميرا</div>
       <div class="hint" id="hint">انظر للكاميرا مباشرة وسيتعرف عليك الجهاز.</div>
+      <div class="qrbox" id="qrbox" style="display:none"><div class="qrimg" id="qrimg"></div><div class="qrtxt"><b>سجّل من موبايلك</b><span>من صفحتك: اضغط تسجيل وامسح الكود</span><span class="qrcode" id="qrcode" dir="ltr"></span></div></div>
     </div>
   </div>
 </div>
@@ -225,6 +227,7 @@ img{-webkit-touch-callout:none;-webkit-user-drag:none}
 
 <script src="config.js"></script>
 <script src="face-api.js"></script>
+<script src="qr.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
