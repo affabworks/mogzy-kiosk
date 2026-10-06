@@ -56,11 +56,14 @@ async function api(action, extra = {}) {
   const r = await fetch(FN, { method: "POST", headers: { "content-type": "application/json", apikey: CFG.key, "x-device-token": LS.get("token", "") },
     body: JSON.stringify({ action, ...extra }) });
   if (r.status === 401) { const e = new Error("device"); e.code = 401; throw e; }
+  if (r.status === 403) { LS.set("susp", true); const e = new Error("suspended"); e.code = 403; throw e; }
   if (!r.ok) throw new Error("http " + r.status);
+  LS.set("susp", false);
   return r.json();
 }
 const qE = () => LS.get("qe", []), qR = () => LS.get("qr", []);
 function netBadge(online) {
+  if (LS.get("susp", false)) { $("netdot").className = "dot off"; $("netmsg").textContent = "اشتراك الشركة موقوف — تواصل مع الإدارة"; return; }
   const n = qE().length + qR().length;
   $("netdot").className = "dot" + (online ? "" : " off");
   $("netmsg").textContent = online ? (n ? `جاري إرسال ${n}…` : "متصل") : (n ? `بدون إنترنت · ${n} بانتظار الإرسال` : "بدون إنترنت · يعمل عادي");
