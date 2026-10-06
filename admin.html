@@ -256,6 +256,7 @@ async function loadAdmin() {
     db("zone_status?select=employee_id,inside,distance_m,updated_at").catch(() => []),
   ]);
   Object.assign(st, { co: co[0], set: set[0], emps, sessions: ses, adv, lv, links, flags: evs, branches, devices, status, zones });
+  if (st.me && st.me.role === "owner" && st.set && st.set.setup_done === false) return setupWizard(false);
   if (!st.zt) st.zt = setInterval(async () => {   // keep the "inside / outside" chips fresh while the Today tab is open
     if (st.tab !== "today" || !st.set || !st.set.zone_status_enabled || document.hidden || document.querySelector(".ov")) return;
     try {
@@ -989,6 +990,122 @@ async function pushInit() {
     } catch (x) { msg.textContent = "تعذر التفعيل: " + arabicErr(x); }
   };
 }
+/* ---------------- SETUP WIZARD (new company: asks, then configures everything) ---------------- */
+const yn = [["y", "أيوه"], ["n", "لا"]];
+const WIZ = [
+  { id: "off", type: "days", t: "إيه أيام الإجازة الأسبوعية؟", h: "اختار يوم أو أكتر. لو مفيش إجازة أسبوعية سيبهم كلهم فاضيين." },
+  { id: "pp", t: "الموظفين بيقبضوا إزاي؟", opts: [["monthly", "شهري"], ["weekly", "أسبوعي"], ["biweekly", "كل أسبوعين"]] },
+  { id: "pstart", t: "فترة الشهر بتبدأ من إمتى؟", h: "الفترة هي اللي بنحسب فيها الحضور والمرتب.", when: (a) => a.pp === "monthly", opts: [[1, "من أول الشهر لآخره"], [16, "من 16 لـ 15"], [21, "من 21 لـ 20"], [26, "من 26 لـ 25"]] },
+  { id: "payday", t: "يوم القبض في الشهر؟", when: (a) => a.pp === "monthly", opts: [[1, "يوم 1"], [5, "يوم 5"], [10, "يوم 10"], [15, "يوم 15"], [25, "يوم 25"], [28, "يوم 28"]] },
+  { id: "pwd", t: "يوم القبض في الأسبوع؟", when: (a) => a.pp !== "monthly", opts: [[4, "الخميس"], [5, "الجمعة"], [6, "السبت"], [0, "الأحد"], [1, "الاثنين"]] },
+  { id: "late", t: "تخصم من الموظف لما يتأخر؟", h: "بنخصم نسبة من أجر اليوم حسب مدة التأخير، وتقدر تغيّر الجدول بعد كده من الإعدادات.", opts: yn },
+  { id: "grace", t: "كام دقيقة سماح قبل ما يتحسب تأخير؟", when: (a) => a.late === "y", opts: [[0, "من غير سماح"], [5, "5 دقايق"], [10, "10 دقايق"], [15, "15 دقيقة"], [30, "30 دقيقة"]] },
+  { id: "abs", t: "تخصم يوم الغياب؟", opts: yn },
+  { id: "free", t: "كام يوم غياب مسموح في الشهر من غير خصم؟", when: (a) => a.abs === "y", opts: [[0, "ولا يوم"], [1, "يوم"], [2, "يومين"], [4, "4 أيام"]] },
+  { id: "early", t: "تخصم الساعات الناقصة لو الموظف مشي بدري؟", opts: yn },
+  { id: "ot", t: "تحسب إضافي للي بيشتغل بعد معاد شيفته؟", opts: yn },
+  { id: "maxp", t: "أقصى مدة يقعد فيها الموظف في الشغل في اليوم؟", h: "الإضافي مش بيتحسب بعد المدة دي. القانون بيحدد 12 ساعة.", when: (a) => a.ot === "y", opts: [["12", "12 ساعة"], ["14", "14 ساعة"], ["none", "بدون حد"]] },
+  { id: "tax", t: "بتخصم ضرايب أو تأمينات من المرتب؟", opts: [["none", "لا"], ["inc", "ضريبة مرتبات"], ["ins", "تأمينات"], ["both", "الاتنين"]] },
+  { id: "advs", t: "الموظف يطلب سلفة من موبايله؟", opts: yn },
+  { id: "apct", t: "أقصى سلفة تطلبها؟", when: (a) => a.advs === "y", opts: [["none", "بدون حد"], [50, "50% من المرتب"], [30, "30% من المرتب"]] },
+  { id: "inst", t: "السلفة تتقسّط؟", when: (a) => a.advs === "y", opts: [[1, "لا، تتخصم مرة واحدة"], [3, "لحد 3 أقساط"], [6, "لحد 6 أقساط"]] },
+  { id: "app", t: "الموظفين يدخلوا من موبايلهم؟", h: "يشوفوا حضورهم ومرتبهم ويطلبوا سلف وإجازات، ويسجلوا حضور بالموقع لو فعّلته.", opts: yn },
+  { id: "sal", t: "الموظف يشوف مرتبه؟", when: (a) => a.app === "y", opts: yn },
+  { id: "link", t: "نربط الموظف بحسابه تلقائي لما رقم موبايله يتطابق؟", h: "لو لا، أنت اللي بتوافق على كل واحد.", when: (a) => a.app === "y", opts: yn },
+  { id: "loc", t: "الموظف يسجّل حضور من موبايله؟", h: "«بالموقع» يتأكد إنه في نطاق الشغل. «موقع + كود» كمان يمسح كود متغيّر على شاشة جهاز الباب.", when: (a) => a.app === "y" && "location_punch" in st.set, opts: [["off", "لا"], ["loc", "بالموقع فقط"], ["locqr", "موقع + كود الباب"]] },
+  { id: "gps", type: "gps", t: "نحدد مكان الشغل", h: "افتح الصفحة وإنت واقف في مكان الشغل واضغط الزرار.", when: (a) => a.loc && a.loc !== "off" },
+  { id: "zone", t: "تشوف جوه/برّه النطاق لكل موظف مسجّل حضور؟", h: "بيظهر فقط للموظف اللي وافق على الشروط، وهو مسجّل حضور والتطبيق مفتوح عنده.", when: (a) => a.app === "y" && "zone_status_enabled" in st.set && !!(a.lat != null && a.lng != null), opts: yn },
+  { id: "ac", t: "لو موظف نسي يسجّل انصراف، نقفل يومه تلقائي على آخر شيفته؟", when: () => "auto_close_enabled" in st.set, opts: yn },
+];
+const wYN = (b) => (b ? "y" : "n");
+function wizInit() {
+  const s = st.set, wd = s.weekly_off_days || [5];
+  return { off: wd.slice(), pp: s.pay_period || "monthly", pstart: s.period_start_day || 1, payday: s.payday_day || 1, pwd: s.period_anchor ? new Date(s.period_anchor + "T12:00:00Z").getUTCDay() : 4,
+    late: wYN(s.late_deduction_enabled ?? true), grace: s.late_grace_minutes ?? 10, abs: wYN(s.absence_deduction_enabled ?? true), free: s.free_absence_days ?? 0, early: wYN(s.early_leave_deduction_enabled ?? true),
+    ot: wYN(s.overtime_enabled ?? true), maxp: s.max_presence_hours == null ? "none" : String(s.max_presence_hours), tax: s.apply_income_tax && s.apply_insurance ? "both" : s.apply_income_tax ? "inc" : s.apply_insurance ? "ins" : "none",
+    advs: wYN(s.employee_can_request_advance ?? true), apct: s.advance_max_pct == null ? "none" : s.advance_max_pct, inst: s.advance_max_installments || 1,
+    app: wYN(s.employee_app_enabled), sal: wYN(s.employee_see_salary ?? true), link: wYN(s.employee_auto_link), loc: s.location_punch ? (s.location_require_qr ? "locqr" : "loc") : "off",
+    lat: s.loc_lat, lng: s.loc_lng, rad: s.loc_radius_m || 150, zone: wYN(s.zone_status_enabled), ac: wYN(s.auto_close_enabled ?? true) };
+}
+function wizBody(a) {
+  const b = { weekly_off_days: a.off.map(Number).sort(), pay_period: a.pp, period_days: a.pp === "biweekly" ? 14 : 7,
+    late_deduction_enabled: a.late === "y", absence_deduction_enabled: a.abs === "y", early_leave_deduction_enabled: a.early === "y", overtime_enabled: a.ot === "y",
+    apply_income_tax: a.tax === "inc" || a.tax === "both", apply_insurance: a.tax === "ins" || a.tax === "both",
+    employee_can_request_advance: a.advs === "y", employee_app_enabled: a.app === "y", setup_done: true };
+  if (a.pp === "monthly") { b.period_start_day = Number(a.pstart); b.payday_day = Number(a.payday); }
+  else { const wd = Number(a.pwd); let d0 = todayStr(); while (new Date(d0 + "T12:00:00Z").getUTCDay() !== wd) d0 = addDays(d0, 1); b.period_anchor = d0; }
+  if (a.late === "y") b.late_grace_minutes = Number(a.grace);
+  if (a.abs === "y") b.free_absence_days = Number(a.free);
+  if (a.ot === "y") b.max_presence_hours = a.maxp === "none" ? null : Number(a.maxp);
+  if (a.advs === "y") { b.advance_max_pct = a.apct === "none" ? null : Number(a.apct); b.advance_max_installments = Number(a.inst); }
+  if (a.app === "y") { b.employee_see_salary = a.sal === "y"; b.employee_auto_link = a.link === "y"; }
+  const hasPlace = a.lat != null && a.lng != null || (st.branches || []).some((x) => x.active && x.lat != null && x.lng != null);
+  const mode = a.app === "y" && hasPlace ? a.loc : "off";
+  b.location_punch = mode !== "off"; b.location_require_qr = mode === "locqr";
+  if (a.lat != null && a.lng != null) { b.loc_lat = a.lat; b.loc_lng = a.lng; b.loc_radius_m = Number(a.rad); }
+  b.zone_status_enabled = a.app === "y" && hasPlace && a.zone === "y";
+  b.auto_close_enabled = a.ac === "y";
+  return Object.fromEntries(Object.entries(b).filter(([k]) => k in st.set));
+}
+function wizSummary(a) {
+  const L = [], on = (x) => (x === "y" ? "مفعّل" : "مقفول");
+  L.push(["إجازة أسبوعية", a.off.length ? a.off.map((d) => DAYS[d]).join("، ") : "بدون"]);
+  L.push(["القبض", a.pp === "monthly" ? `شهري · الفترة ${Number(a.pstart) === 1 ? "من أول الشهر" : "من " + a.pstart + " لـ " + (a.pstart - 1)} · القبض يوم ${a.payday}` : (a.pp === "weekly" ? "أسبوعي" : "كل أسبوعين") + " · يوم " + DAYS[a.pwd]]);
+  L.push(["خصم التأخير", a.late === "y" ? "مفعّل · سماح " + a.grace + " دقيقة" : "مقفول"]);
+  L.push(["خصم الغياب", a.abs === "y" ? "مفعّل · مسموح " + a.free + " يوم/شهر" : "مقفول"]);
+  L.push(["خصم الانصراف المبكر", on(a.early)]);
+  L.push(["الإضافي", a.ot === "y" ? "مفعّل · أقصى تواجد " + (a.maxp === "none" ? "بدون حد" : a.maxp + " ساعة") : "مقفول"]);
+  L.push(["ضرايب وتأمينات", { none: "لا", inc: "ضريبة مرتبات", ins: "تأمينات", both: "ضريبة + تأمينات" }[a.tax]]);
+  L.push(["السلف من الموبايل", a.advs === "y" ? "مسموح · أقصى " + (a.apct === "none" ? "بدون حد" : a.apct + "%") + " · " + (Number(a.inst) > 1 ? "لحد " + a.inst + " أقساط" : "بدون تقسيط") : "مقفول"]);
+  L.push(["دخول الموظفين من موبايلهم", a.app === "y" ? "مفعّل" + (a.sal === "y" ? " · يشوف مرتبه" : " · مرتبه مخفي") + (a.link === "y" ? " · ربط تلقائي" : " · بموافقتك") : "مقفول"]);
+  const hasPlace = a.lat != null && a.lng != null || (st.branches || []).some((x) => x.active && x.lat != null && x.lng != null);
+  if (a.app === "y" && "location_punch" in st.set) L.push(["الحضور من الموبايل", a.loc === "off" ? "مقفول" : !hasPlace ? "مقفول (لسه مكان الشغل ما اتحددش)" : a.loc === "locqr" ? "موقع + كود الباب" : "بالموقع فقط"]);
+  if (a.app === "y" && a.zone) L.push(["جوه/برّه النطاق", a.zone === "y" && hasPlace ? "مفعّل" : "مقفول"]);
+  if ("auto_close_enabled" in st.set) L.push(["قفل الانصراف المنسي", on(a.ac)]);
+  return L;
+}
+function setupWizard(fromSettings) {
+  const a = wizInit(); let idx = 0, summary = false;
+  const steps = () => WIZ.filter((s) => !s.when || s.when(a));
+  const finish = async () => {
+    try { await db("company_settings?company_id=eq." + st.co.id, { method: "PATCH", body: wizBody(a) }); await loadAdmin(); st.tab = fromSettings ? "set" : "today"; render(); }
+    catch (e) { const er = $("we"); if (er) er.textContent = arabicErr(e); }
+  };
+  const skip = async () => {
+    if (!confirm("هنسيب الإعدادات الافتراضية زي ما هي، وتقدر تعدّلها بعد كده من تبويب الإعدادات. تمام؟")) return;
+    try { if ("setup_done" in st.set) await db("company_settings?company_id=eq." + st.co.id, { method: "PATCH", body: { setup_done: true } }); st.set.setup_done = true; } catch {}
+    fromSettings ? (st.tab = "set", render()) : render();
+  };
+  const draw = () => {
+    const S = steps(); if (idx > S.length) idx = S.length; summary = idx === S.length; const s = S[idx];
+    const head = `<div class="wrap"><div class="top">${LOGO}<div class="sub">${esc(st.co.name)}</div></div>`;
+    if (summary) {
+      view(`${head}<h1>جاهز نطبّق؟</h1><div class="sub" style="margin:-4px 0 10px">دي الإعدادات اللي اخترتها. تقدر تعدّل أي حاجة بعد كده من الإعدادات.</div>
+       <div class="card" style="padding:6px 18px">${wizSummary(a).map(([k, v]) => `<div class="row" style="min-height:48px"><div class="grow">${k}</div><b style="text-align:left;font-size:14px">${esc(String(v))}</b></div>`).join("")}</div>
+       <div id="we" class="err"></div><button class="btn p full" id="wgo" style="margin-top:8px">طبّق الإعدادات</button><button class="btn full" id="wbk" style="margin:8px 0 24px">رجوع</button></div>`);
+      $("wgo").onclick = async () => { $("wgo").disabled = true; await finish(); const e = $("wgo"); if (e) e.disabled = false; };
+      $("wbk").onclick = () => { idx--; draw(); }; return;
+    }
+    let body = "";
+    if (s.type === "days") body = `<div class="dchips" id="wd">${DAYS.map((d, i) => `<button type="button" class="dc ${a.off.includes(i) ? "on" : ""}" data-day="${i}">${d}</button>`).join("")}</div><button class="btn p full" id="wnx">التالي</button>`;
+    else if (s.type === "gps") body = `<button class="btn p full" id="wg">استخدم موقعي الحالي</button><div class="sub" id="wgm" style="margin:8px 0">${a.lat != null ? "تم تحديد المكان ✓" : ""}</div><div class="sub" style="margin-top:6px">النطاق المسموح</div><div class="dchips" id="wr">${[100, 150, 300].map((r) => `<button type="button" class="dc ${Number(a.rad) === r ? "on" : ""}" data-r="${r}">${r} متر</button>`).join("")}</div><button class="btn p full" id="wnx">${a.lat != null ? "التالي" : "هحدده بعدين"}</button>`;
+    else body = s.opts.map(([v, l]) => `<button class="btn full wopt ${String(a[s.id]) === String(v) ? "p" : ""}" data-v="${v}" style="margin-bottom:8px;min-height:52px">${l}</button>`).join("");
+    const n = S.length;
+    view(`${head}<div class="sub" style="margin-bottom:6px">سؤال ${idx + 1} من ${n}</div><div style="height:6px;border-radius:3px;background:var(--btn);margin-bottom:14px"><div style="height:6px;border-radius:3px;background:var(--ink);width:${Math.round(((idx + 1) / (n + 1)) * 100)}%"></div></div>
+     <h1 style="margin-top:0">${s.t}</h1>${s.h ? `<div class="sub" style="margin:-4px 0 12px;line-height:1.8">${s.h}</div>` : ""}${body}
+     <div class="row" style="border:0;margin-top:10px;justify-content:space-between">${idx ? '<button class="btn sm" id="wb">رجوع</button>' : "<span></span>"}<button class="btn sm" id="wsk" style="border:0;background:none;text-decoration:underline">تخطي الإعداد</button></div></div>`);
+    if ($("wb")) $("wb").onclick = () => { idx--; draw(); };
+    $("wsk").onclick = skip;
+    const next = () => { idx++; draw(); };
+    if (s.type === "days") { document.querySelectorAll("#wd .dc").forEach((b) => (b.onclick = () => { const d = Number(b.dataset.day); a.off = a.off.includes(d) ? a.off.filter((x) => x !== d) : [...a.off, d]; b.classList.toggle("on"); })); $("wnx").onclick = next; }
+    else if (s.type === "gps") {
+      document.querySelectorAll("#wr .dc").forEach((b) => (b.onclick = () => { a.rad = Number(b.dataset.r); document.querySelectorAll("#wr .dc").forEach((x) => x.classList.toggle("on", x === b)); }));
+      $("wg").onclick = async () => { $("wgm").textContent = "جاري تحديد موقعك…"; try { const p = await getPos(); a.lat = Number(p.lat.toFixed(6)); a.lng = Number(p.lng.toFixed(6)); $("wgm").textContent = "تم تحديد المكان ✓ (دقة حوالي " + Math.round(p.acc) + " متر)"; $("wnx").textContent = "التالي"; } catch (e) { $("wgm").textContent = e.message; } };
+      $("wnx").onclick = next;
+    } else document.querySelectorAll(".wopt").forEach((b) => (b.onclick = () => { const o = s.opts.find((x) => String(x[0]) === b.dataset.v); a[s.id] = typeof o[0] === "number" ? o[0] : o[0]; next(); }));
+  };
+  draw();
+}
 function tabSet() {
   const s = st.set, tg = (k, l, sub = "") => `<label class="row" style="cursor:pointer"><div class="grow"><b>${l}</b>${sub ? `<small>${sub}</small>` : ""}</div><input type="checkbox" data-k="${k}" ${s[k] ? "checked" : ""}></label>`;
   const num = (k, l, u, h = "") => `<div class="row"><div class="grow"><b>${l}</b>${h ? `<small>${h}</small>` : ""}</div><input type="number" step="any" data-n="${k}" value="${s[k] ?? ""}" style="width:90px;text-align:center"><span class="sub" style="width:44px">${u}</span></div>`;
@@ -997,7 +1114,7 @@ function tabSet() {
   const sec = (title, status, body, open) => `<details class="card sec"${open ? " open" : ""}><summary><span>${title}<span class="ss">${status}</span></span></summary><div class="sb">${body}</div></details>`;
   const adv = (body) => `<details class="adv"><summary>خيارات متقدمة</summary>${body}</details>`;
   const ppDay = s.period_anchor ? new Date(s.period_anchor + "T12:00:00Z").getUTCDay() : 4;
-  $("body").innerHTML = `<h1>الإعدادات</h1><div class="sub" style="margin:-4px 0 6px">اضغط على أي قسم عشان تفتحه. كل حاجة اختيارية وتقدر ترجع لها في أي وقت.</div>
+  $("body").innerHTML = `<h1>الإعدادات</h1>${"setup_done" in s ? '<button class="btn full" id="wz" style="margin:0 0 10px">إعداد سريع بالأسئلة</button>' : ""}<div class="sub" style="margin:-4px 0 6px">اضغط على أي قسم عشان تفتحه. كل حاجة اختيارية وتقدر ترجع لها في أي وقت.</div>
    ${sec("أيام العمل والإجازات", (s.weekly_off_days || []).length ? "إجازة: " + s.weekly_off_days.map((d) => DAYS[d]).join("، ") : "بدون إجازة أسبوعية", `<div class="sub" style="margin-bottom:6px">اختار أيام الإجازة الأسبوعية. لو مفيش، سيبهم كلهم مقفولين.</div>
      <div class="dchips" id="wo">${DAYS.map((d, i) => `<button type="button" class="dc ${(s.weekly_off_days || []).includes(i) ? "on" : ""}" data-day="${i}">${d}</button>`).join("")}</div>
      ${num("free_absence_days", "أيام غياب مسموحة لكل موظف في الشهر", "يوم", "بدون خصم. تقدر تغيّرها لموظف معين من صفحته.")}`)}
@@ -1056,6 +1173,7 @@ function tabSet() {
     navigator.geolocation.getCurrentPosition((pos) => { document.querySelector('[data-nn="loc_lat"]').value = pos.coords.latitude.toFixed(6); document.querySelector('[data-nn="loc_lng"]').value = pos.coords.longitude.toFixed(6); m.textContent = "تم تحديد الموقع ✓ (دقة حوالي " + Math.round(pos.coords.accuracy) + " متر). اضغط حفظ."; }, () => (m.textContent = "تعذر تحديد الموقع، اسمح للمتصفح بالوصول للموقع."), { enableHighAccuracy: true, timeout: 12000 }); };
   $("cpk").onclick = async () => { const ok = await copyText(new URL("./", location.href).href); if (ok) $("cpk").textContent = "تم النسخ ✓"; };
   $("cpl").onclick = async () => { const ok = await copyText(new URL("employee.html", location.href).href); if (ok) $("cpl").textContent = "تم النسخ ✓"; };
+  if ($("wz")) $("wz").onclick = () => setupWizard(true);
   $("sv").onclick = async () => {
     setErr(""); const body = {};
     document.querySelectorAll("[data-k]").forEach((i) => (body[i.dataset.k] = i.checked));
