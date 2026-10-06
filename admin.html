@@ -39,6 +39,7 @@ input[type=date],input[type=time],input[type=month]{-webkit-appearance:none;appe
 .btns{display:flex;gap:10px;margin:0 0 12px}.sheet .btns{margin:22px 0 0}.clk{cursor:pointer}.clk:active{background:var(--soft)}
 .ov{position:fixed;inset:0;background:rgba(31,27,23,.55);display:grid;place-items:center;z-index:90;padding:16px}.sheet{background:var(--surface);border-radius:20px;padding:20px;max-width:420px;width:100%;max-height:90vh;overflow:auto}
 .ps .nt{font-size:13px;color:var(--mute);line-height:1.9;margin:10px 0}.strip{display:grid;grid-template-columns:repeat(5,1fr);border:1px solid #cfc7ba;border-radius:12px;overflow:hidden;margin:10px 0 14px}.strip>div{padding:8px 4px;text-align:center;border-left:1px solid #cfc7ba}.strip>div:last-child{border-left:0}.strip span{display:block;font-size:12px;color:var(--mute)}.strip b{font-size:15px}.strip .r b{color:var(--red)}.strip .net{background:var(--ink)}.strip .net span,.strip .net b{color:#fff}
+.qa{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:14px 0}.qa .btn{min-height:56px;font-size:17px}.qa .btn:only-child{grid-column:1/-1}.net.clk:active{opacity:.92}
 .ps table.cal{width:100%;border-collapse:collapse;font-size:13px}.ps table.cal th{background:var(--ink);color:#fff;font-weight:600;font-size:12.5px;padding:7px 4px;border:1px solid var(--ink)}.ps table.cal td{border:1px solid #d9d2c7;padding:6px 4px;text-align:center}.ps table.cal td.dy,.ps table.cal td.nt2{text-align:right}.ps table.cal td.dy{white-space:nowrap;font-weight:500}.ps table.cal td.nt2{min-width:96px;font-size:12px}.ps table.cal td{padding:6px 3px}.ps table.cal tr.mu td{color:#a39a8d;background:#f6f3ee}.ps table.cal tr.bad td{background:#fdf1ef}.ps table.cal tr.bad td:nth-child(5){color:var(--red);font-weight:700}.ps table.cal tr.good td:nth-child(6){color:#2f7d4f;font-weight:700}.ps table.cal tr.tt td{font-weight:700;background:#efeae1}
 @media print{#pa .strip{border-color:#888}#pa .strip>div{border-color:#888}#pa .strip .net{background:#222;-webkit-print-color-adjust:exact;print-color-adjust:exact}#pa table.cal th{background:#222!important;color:#fff!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;border-color:#222}#pa table.cal td{padding:2px 4px;font-size:11px;border:1px solid #999;text-align:center}#pa table.cal td.dy,#pa table.cal td.nt2{text-align:right}#pa table.cal tr.mu td{background:#f1f1f1!important}#pa .nt{font-size:11px}}
 .ps tr.dt td{font-size:13px;color:var(--mute);padding:3px 14px 3px 0;border-bottom:0}.ps tr.dt td.n{padding-right:0}.ps h2{margin:0}.ps h3{margin:14px 0 8px;font-size:17px}.ps table{width:100%}.ps td{padding:6px 0;border-bottom:1px solid var(--line)}.ps tr.d td:first-child{color:var(--red)}.ps tr.tot td{font-weight:700;border-bottom:0;font-size:18px}.sig{margin-top:28px;color:var(--mute);font-size:14px}
@@ -134,7 +135,7 @@ const arabicErr = (e) => {
 };
 
 /* ---------------- state ---------------- */
-const st = { me: null, co: null, set: null, emps: [], sessions: [], adv: [], lv: [], links: [], pay: [], tab: "today", month: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10), mine: null, status: null };
+const st = { flash: null, me: null, co: null, set: null, emps: [], sessions: [], adv: [], lv: [], links: [], pay: [], tab: "today", month: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10), mine: null, status: null };
 const view = (html) => { $("app").innerHTML = html; };
 const val = (id) => ($(id) ? $(id).value.trim() : "");
 const setErr = (m, ok) => { const e = $("err"); if (e) { e.textContent = m || ""; e.className = "err" + (ok ? " ok" : ""); } };
@@ -358,12 +359,136 @@ function tabReq() {
   document.querySelectorAll("[data-l]").forEach((b) => (b.onclick = async () => { const [id, ok] = b.dataset.l.split("|"); try { await rpc("decide_employee_link", { p_request: id, p_approve: ok === "1" }); await loadAdmin(); } catch (e) { alert(arabicErr(e)); } }));
 }
 function tabEmp() {
-  $("body").innerHTML = `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px"><h1 style="margin:12px 0 14px">الموظفون</h1><button class="btn p sm" id="ea">＋ موظف</button></div>
+  $("body").innerHTML = `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px"><h1 style="margin:12px 0 14px">الموظفون</h1><div style="display:flex;gap:8px"><button class="btn sm" id="ei" style="white-space:nowrap">استيراد</button><button class="btn p sm" id="ea" style="white-space:nowrap">＋ موظف</button></div></div>
    <div class="card" style="padding:6px 20px">${st.emps.map((e) => `<div class="row clk" data-e="${e.id}"><div class="grow"><b>${esc(e.full_name)}</b><small>${esc(e.job_title || "")} ${e.shift_start.slice(0, 5)} → ${e.shift_end.slice(0, 5)} · ${money(e.monthly_salary)} ج.م${e.branch_id && st.branches.length ? " · " + esc((st.branches.find((b) => b.id === e.branch_id) || {}).name || "") : ""}</small></div>${e.active ? "" : '<span class="chip c-amber">موقوف</span>'}<button class="btn sm" data-b="${e.id}">بونص / خصم</button></div>`).join("") || '<div class="sub" style="padding:14px 0">لا يوجد موظفون. اضغط ＋ موظف عشان تضيف أول موظف.</div>'}</div>
    <div class="sub" style="text-align:center">اضغط على الموظف لتعديله أو لعرض سجل حضوره.</div>`;
   document.querySelectorAll("[data-e]").forEach((r) => (r.onclick = () => empSheet(st.emps.find((x) => x.id === r.dataset.e))));
   document.querySelectorAll("[data-b]").forEach((b) => (b.onclick = (ev) => { ev.stopPropagation(); adjSheet(st.emps.find((x) => x.id === b.dataset.b)); }));
-  $("ea").onclick = addEmpSheet;
+  $("ea").onclick = addEmpSheet; $("ei").onclick = importEmpSheet;
+}
+/* ---------------- Excel / CSV import of employees (no external libs) ---------------- */
+function zipStore(files) {
+  const te = new TextEncoder(), T = (() => { const t = []; for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+  const crc = (b) => { let c = ~0; for (let i = 0; i < b.length; i++) c = T[(c ^ b[i]) & 255] ^ (c >>> 8); return ~c >>> 0; };
+  const u16 = (n) => [n & 255, (n >> 8) & 255], u32 = (n) => [n & 255, (n >> 8) & 255, (n >> 16) & 255, (n >> 24) & 255];
+  const parts = [], cd = []; let off = 0;
+  for (const [name, str] of Object.entries(files)) {
+    const nm = te.encode(name), data = te.encode(str), c = crc(data);
+    const lh = new Uint8Array([0x50, 0x4b, 3, 4, ...u16(20), ...u16(0x0800), ...u16(0), ...u16(0), ...u16(0), ...u32(c), ...u32(data.length), ...u32(data.length), ...u16(nm.length), ...u16(0), ...nm]);
+    parts.push(lh, data);
+    cd.push(new Uint8Array([0x50, 0x4b, 1, 2, ...u16(20), ...u16(20), ...u16(0x0800), ...u16(0), ...u16(0), ...u16(0), ...u32(c), ...u32(data.length), ...u32(data.length), ...u16(nm.length), ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(0), ...u32(off), ...nm]));
+    off += lh.length + data.length;
+  }
+  const cdl = cd.reduce((a, b) => a + b.length, 0), n = cd.length;
+  const end = new Uint8Array([0x50, 0x4b, 5, 6, ...u16(0), ...u16(0), ...u16(n), ...u16(n), ...u32(cdl), ...u32(off), ...u16(0)]);
+  const all = [...parts, ...cd, end], out = new Uint8Array(all.reduce((a, b) => a + b.length, 0)); let p = 0; all.forEach((b) => { out.set(b, p); p += b.length; }); return out;
+}
+function empTemplateXlsx(hasBr) {
+  const X = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const heads = ["الاسم", "الوظيفة", "الموبايل", "المرتب", "بداية الشغل", "نهاية الشغل", "الفرع"], ex = ["مثال: أحمد علي (امسح السطر ده)", "كاشير", "01012345678", "6000", "09:00", "17:00", hasBr ? "اسم الفرع" : ""];
+  const L = (i) => String.fromCharCode(65 + i), cell = (r, c, t, s) => `<c r="${L(c)}${r}" t="inlineStr"${s ? ` s="${s}"` : ""}><is><t>${X(t)}</t></is></c>`;
+  const notes = ["تعليمات:", "الاسم والمرتب مطلوبين، والباقي اختياري.", "بداية ونهاية الشغل بصيغة 09:00 (لو فاضية: 09:00 و 17:00).", "المرتب = الشهري، أو لكل فترة قبض لو شركتك معدّة كده."];
+  const rows = [heads, ex].map((r, i) => `<row r="${i + 1}">${r.map((t, c) => cell(i + 1, c, t, i === 0 ? 1 : 0)).join("")}${notes[i] ? cell(i + 1, 8, notes[i]) : ""}</row>`).join("") + [2, 3].map((i) => `<row r="${i + 1}">${cell(i + 1, 8, notes[i])}</row>`).join("");
+  const sheet = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView rightToLeft="1" workbookViewId="0"/></sheetViews><cols><col min="1" max="1" width="30" customWidth="1"/><col min="2" max="7" width="16" customWidth="1"/><col min="9" max="9" width="50" customWidth="1"/></cols><sheetData>${rows}</sheetData></worksheet>`;
+  return zipStore({
+    "[Content_Types].xml": `<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>`,
+    "_rels/.rels": `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`,
+    "xl/workbook.xml": `<?xml version="1.0" encoding="UTF-8"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="الموظفون" sheetId="1" r:id="rId1"/></sheets></workbook>`,
+    "xl/_rels/workbook.xml.rels": `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`,
+    "xl/styles.xml": `<?xml version="1.0" encoding="UTF-8"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Arial"/></font><font><b/><color rgb="FFFFFFFF"/><sz val="11"/><name val="Arial"/></font></fonts><fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF1F1B17"/></patternFill></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="2"><xf numFmtId="49" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="49" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1" applyNumberFormat="1"><alignment horizontal="center"/></xf></cellXfs></styleSheet>`,
+    "xl/worksheets/sheet1.xml": sheet,
+  });
+}
+async function unzipRead(buf) {
+  const u = new Uint8Array(buf), dv = new DataView(buf), td = new TextDecoder(); let e = u.length - 22;
+  while (e >= 0 && dv.getUint32(e, true) !== 0x06054b50) e--; if (e < 0) throw new Error("الملف مش Excel (xlsx) صالح");
+  const n = dv.getUint16(e + 10, true); let p = dv.getUint32(e + 16, true); const out = {};
+  for (let i = 0; i < n; i++) {
+    if (dv.getUint32(p, true) !== 0x02014b50) break;
+    const m = dv.getUint16(p + 10, true), cs = dv.getUint32(p + 20, true), nl = dv.getUint16(p + 28, true), el = dv.getUint16(p + 30, true), cl = dv.getUint16(p + 32, true), lo = dv.getUint32(p + 42, true), name = td.decode(u.subarray(p + 46, p + 46 + nl)); p += 46 + nl + el + cl;
+    if (!/^xl\/(sharedStrings|worksheets\/sheet\d+)\.xml$/.test(name)) continue;
+    const st0 = lo + 30 + dv.getUint16(lo + 26, true) + dv.getUint16(lo + 28, true), raw = u.subarray(st0, st0 + cs);
+    if (m === 0) out[name] = raw; else if (m === 8) { if (typeof DecompressionStream === "undefined") throw new Error("المتصفح قديم، جرّب Chrome أو Safari حديث، أو احفظ الملف CSV"); out[name] = new Uint8Array(await new Response(new Blob([raw]).stream().pipeThrough(new DecompressionStream("deflate-raw"))).arrayBuffer()); }
+  }
+  return out;
+}
+async function readXlsx(buf) {
+  const z = await unzipRead(buf), td = new TextDecoder(), X = (k) => (z[k] ? new DOMParser().parseFromString(td.decode(z[k]), "application/xml") : null);
+  const ss = [], sx = X("xl/sharedStrings.xml"); if (sx) sx.querySelectorAll("si").forEach((si) => ss.push([...si.querySelectorAll("t")].map((t) => t.textContent).join("")));
+  const key = Object.keys(z).filter((k) => /^xl\/worksheets\/sheet\d+\.xml$/.test(k)).sort((a, b) => a.length - b.length || a.localeCompare(b))[0]; if (!key) throw new Error("مفيش شيت في الملف");
+  const rows = []; X(key).querySelectorAll("row").forEach((r) => {
+    const row = []; r.querySelectorAll("c").forEach((c, ci) => {
+      const ref = c.getAttribute("r") || "", ix = ref ? ref.replace(/\d/g, "").split("").reduce((a, ch) => a * 26 + ch.charCodeAt(0) - 64, 0) - 1 : ci, t = c.getAttribute("t"); let v = "";
+      if (t === "inlineStr") v = [...c.querySelectorAll("t")].map((q) => q.textContent).join(""); else { const ve = c.querySelector("v"); v = ve ? ve.textContent : ""; if (t === "s") v = ss[Number(v)] ?? ""; else if ((t === "n" || !t) && v !== "") v = Number(v); }
+      row[ix] = v;
+    }); rows[(Number(r.getAttribute("r")) || rows.length + 1) - 1] = row;
+  }); return Array.from(rows, (r) => r || []);
+}
+function parseCsv(text) {
+  text = text.replace(/^﻿/, ""); const first = text.split(/\r?\n/)[0] || "", d = [",", ";", "\t"].map((c) => [c, first.split(c).length]).sort((a, b) => b[1] - a[1])[0][0];
+  const rows = []; let row = [], cur = "", q = false;
+  for (let i = 0; i < text.length; i++) { const ch = text[i];
+    if (q) { if (ch === '"') { if (text[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += ch; }
+    else if (ch === '"') q = true; else if (ch === d) { row.push(cur); cur = ""; } else if (ch === "\n" || ch === "\r") { if (ch === "\r" && text[i + 1] === "\n") i++; row.push(cur); rows.push(row); row = []; cur = ""; } else cur += ch; }
+  if (cur !== "" || row.length) { row.push(cur); rows.push(row); } return rows;
+}
+const arDigits = (s) => String(s).replace(/[٠-٩]/g, (c) => c.charCodeAt(0) - 1632).replace(/[۰-۹]/g, (c) => c.charCodeAt(0) - 1776);
+const nzH = (s) => arDigits(s).trim().toLowerCase().replace(/[أإآ]/g, "ا").replace(/ة/g, "ه").replace(/ى/g, "ي").replace(/\s+/g, " ");
+const IMP_COLS = [["name", ["الاسم", "اسم الموظف", "الاسم الكامل", "name", "full name"]], ["job", ["الوظيفه", "الوظيفة", "job", "title", "المسمي الوظيفي"]], ["phone", ["الموبايل", "الموبيل", "التليفون", "الهاتف", "رقم الموبايل", "رقم التليفون", "phone", "mobile"]], ["salary", ["المرتب", "الراتب", "المرتب الشهري", "الاجر", "salary", "wage"]], ["start", ["بدايه الشغل", "بدايه", "يبدا الشغل", "يبدا", "start", "from", "شيفت من"]], ["end", ["نهايه الشغل", "نهايه", "ينتهي", "end", "to", "شيفت الي"]], ["branch", ["الفرع", "branch"]]].map(([k, a]) => [k, a.map(nzH)]);
+function impTime(v) {
+  if (v === "" || v == null) return { v: null };
+  if (typeof v === "number" && v >= 0 && v < 1) { const m = Math.round(v * 1440); return { v: String(Math.floor(m / 60) % 24).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0") }; }
+  const s = arDigits(v).trim(), mt = s.match(/^(\d{1,2})(?:[:.](\d{2}))?(?::\d{2})?\s*(am|pm|ص|م)?$/i); if (!mt) return { bad: true };
+  let h = Number(mt[1]), mi = Number(mt[2] || 0); const ap = (mt[3] || "").toLowerCase(); if (ap === "pm" || ap === "م") { if (h < 12) h += 12; } else if ((ap === "am" || ap === "ص") && h === 12) h = 0;
+  if (h > 23 || mi > 59) return { bad: true }; return { v: String(h).padStart(2, "0") + ":" + String(mi).padStart(2, "0") };
+}
+function impParse(rows) {
+  let hi = -1, map = {}; const found = (r) => { const m = {}; r.forEach((c, i) => { const h = nzH(c); IMP_COLS.forEach(([k, al]) => { if (m[k] == null && al.includes(h)) m[k] = i; }); }); return m; };
+  for (let i = 0; i < Math.min(rows.length, 6); i++) { const m = found(rows[i]); if (m.name != null) { hi = i; map = m; break; } }
+  if (hi < 0) { hi = 0; ["name", "job", "phone", "salary", "start", "end", "branch"].forEach((k, i) => (map[k] = i)); }
+  const brs = st.branches || [], bn = new Map(brs.map((b) => [nzH(b.name), b.id])), have = new Set(st.emps.map((e) => nzH(e.full_name))), seen = new Set(), ok = [], bad = [], dup = [];
+  rows.slice(hi + 1).forEach((r, k) => {
+    const no = hi + k + 2, g = (key) => (map[key] != null && r[map[key]] != null ? r[map[key]] : "");
+    if (!r.some((c) => String(c ?? "").trim() !== "")) return;
+    const name = String(g("name")).trim(); if (!name || /^مثال/.test(name)) return;
+    const salRaw = g("salary"), sal = typeof salRaw === "number" ? salRaw : Number(arDigits(salRaw).replace(/[,\s]/g, ""));
+    const t1 = impTime(g("start")), t2 = impTime(g("end")); let ph = g("phone"); ph = typeof ph === "number" ? String(ph) : arDigits(ph).replace(/[\s\-()]/g, ""); if (/^1\d{9}$/.test(ph)) ph = "0" + ph;
+    const bv = String(g("branch")).trim(); let branch_id = null; const errs = [];
+    if (salRaw === "" || !(sal >= 0) || !isFinite(sal)) errs.push("المرتب ناقص أو غلط");
+    if (t1.bad || t2.bad) errs.push("وقت الشغل غلط (اكتبه 09:00)");
+    if (bv && brs.length) { branch_id = bn.get(nzH(bv)) || null; if (!branch_id) errs.push("الفرع «" + bv + "» مش موجود"); }
+    if (errs.length) return bad.push({ no, name, msg: errs.join("، ") });
+    const key = nzH(name); if (have.has(key) || seen.has(key)) return dup.push({ no, name }); seen.add(key);
+    ok.push({ company_id: st.co.id, full_name: name, job_title: String(g("job")).trim() || null, phone: ph || null, monthly_salary: sal, shift_start: t1.v || "09:00", shift_end: t2.v || "17:00", branch_id });
+  });
+  return { ok, bad, dup };
+}
+function importEmpSheet() {
+  const o = overlay(), hasBr = !!(st.branches && st.branches.length);
+  o.innerHTML = `<div class="sheet"><button type="button" class="xclose" aria-label="إغلاق">✕</button><h2>استيراد موظفين من Excel</h2>
+    <div class="sub">١) نزّل النموذج واملاه (اسم ومرتب على الأقل). ٢) اختار الملف (Excel أو CSV) وراجع المعاينة قبل الاستيراد.</div>
+    <div class="btns"><button class="btn sm" id="itpl" style="flex:1;white-space:nowrap">تنزيل النموذج</button><label class="btn p sm" for="ifile" style="cursor:pointer;flex:1;white-space:nowrap;display:inline-flex;align-items:center;justify-content:center">اختيار ملف</label><input id="ifile" type="file" accept=".xlsx,.csv,.txt,text/csv" style="display:none"></div>
+    <div id="ipv" class="sub"></div><div id="xe" class="err"></div><button class="btn p full" id="igo" disabled style="margin-top:8px">استيراد</button></div>`;
+  const q = (id) => o.querySelector(id); let res = null;
+  q("#itpl").onclick = () => { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([empTemplateXlsx(hasBr)], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" })); a.download = "mogzy-employees-template.xlsx"; document.body.appendChild(a); a.click(); a.remove(); };
+  q("#ifile").onchange = async (ev) => {
+    const f = ev.target.files[0]; if (!f) return; q("#xe").textContent = ""; q("#igo").disabled = true; q("#ipv").textContent = "جاري قراءة الملف…"; res = null;
+    try {
+      const rows = /\.xlsx$/i.test(f.name) ? await readXlsx(await f.arrayBuffer()) : /\.xls$/i.test(f.name) ? (() => { throw new Error("الملف بصيغة xls القديمة. افتحه في Excel واحفظه باسم xlsx أو CSV."); })() : parseCsv(await f.text());
+      if (rows.length > 600) throw new Error("الملف كبير، اقسمه لملفات أقل من 500 موظف.");
+      res = impParse(rows); const { ok, bad, dup } = res;
+      q("#ipv").innerHTML = `<div style="display:flex;gap:8px;flex-wrap:wrap;margin:6px 0"><span class="chip c-green">جاهز: ${ok.length}</span>${dup.length ? `<span class="chip c-gray">موجود بالفعل: ${dup.length}</span>` : ""}${bad.length ? `<span class="chip c-red">فيه مشكلة: ${bad.length}</span>` : ""}</div>` +
+        (ok.length ? `<div style="font-size:14px;line-height:1.9">${ok.slice(0, 6).map((r) => `<div>• ${esc(r.full_name)} <span class="sub" style="font-size:13px">· ${money(r.monthly_salary)} ج.م · ${r.shift_start} → ${r.shift_end}</span></div>`).join("")}${ok.length > 6 ? `<div class="sub">… و${ok.length - 6} آخرين</div>` : ""}</div>` : "") +
+        (bad.length ? `<div style="font-size:14px;line-height:1.9;color:var(--red);margin-top:8px">${bad.slice(0, 6).map((r) => `<div>صف ${r.no} (${esc(r.name)}): ${esc(r.msg)}</div>`).join("")}${bad.length > 6 ? `<div>… و${bad.length - 6} آخرين</div>` : ""}</div><div class="sub" style="font-size:13px">الصفوف اللي فيها مشكلة مش هتتستورد. صلّحها في الملف وارفعه تاني.</div>` : "");
+      q("#igo").disabled = !ok.length; q("#igo").textContent = ok.length ? "استيراد " + ok.length + " موظف" : "استيراد";
+      if (!ok.length && !bad.length && !dup.length) q("#ipv").textContent = "ملقيتش موظفين في الملف. اتأكد إنك استخدمت النموذج وكتبت الأسماء.";
+    } catch (x) { q("#ipv").textContent = ""; q("#xe").textContent = x && x.message ? x.message : String(x); }
+  };
+  q("#igo").onclick = async () => {
+    if (!res || !res.ok.length) return; q("#igo").disabled = true; q("#xe").className = "err"; q("#xe").textContent = "";
+    try { await db("employees", { method: "POST", prefer: "return=minimal", body: res.ok }); q("#xe").className = "err ok"; q("#xe").textContent = "تم استيراد " + res.ok.length + " موظف ✓"; setTimeout(async () => { o.remove(); await loadAdmin(); }, 900); }
+    catch (x) { q("#igo").disabled = false; q("#xe").textContent = arabicErr(x); }
+  };
 }
 function addEmpSheet() {
   const o = overlay();
@@ -700,6 +825,48 @@ async function slipPdf(m, name) {
   try { await document.fonts.load("700 14px 'IBM Plex Sans Arabic'"); await document.fonts.load("400 14px 'IBM Plex Sans Arabic'"); } catch {}
   const { cv, W, H } = slipCanvas(m); return new File([pdfFromCanvas(cv, W, H)], name, { type: "application/pdf" });
 }
+function pdfMulti(pages) {
+  const te = new TextEncoder(), parts = [], offs = []; let pos = 0;
+  const put = (b) => { const u = typeof b === "string" ? te.encode(b) : b; parts.push(u); pos += u.length; };
+  const N = pages.length; put("%PDF-1.4\n");
+  const obj = (n, body) => { offs[n] = pos; put(`${n} 0 obj\n`); put(body); put("\nendobj\n"); };
+  obj(1, "<< /Type /Catalog /Pages 2 0 R >>"); obj(2, `<< /Type /Pages /Kids [${pages.map((_, i) => `${3 + 3 * i} 0 R`).join(" ")}] /Count ${N} >>`);
+  pages.forEach((p, i) => { const po = 3 + 3 * i, io = po + 1, co = po + 2, hpt = Math.round((595 * p.H) / p.W * 100) / 100;
+    obj(po, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 ${hpt}] /Resources << /XObject << /Im${i} ${io} 0 R >> >> /Contents ${co} 0 R >>`);
+    offs[io] = pos; put(`${io} 0 obj\n<< /Type /XObject /Subtype /Image /Width ${p.w} /Height ${p.h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${p.jpg.length} >>\nstream\n`); put(p.jpg); put("\nendstream\nendobj\n");
+    const cs = `q 595 0 0 ${hpt} 0 0 cm /Im${i} Do Q`; obj(co, `<< /Length ${cs.length} >>\nstream\n${cs}\nendstream`); });
+  const total = 3 + 3 * N, xr = pos; put(`xref\n0 ${total}\n0000000000 65535 f \n`); for (let i = 1; i < total; i++) put(String(offs[i]).padStart(10, "0") + " 00000 n \n");
+  put(`trailer\n<< /Size ${total} /Root 1 0 R >>\nstartxref\n${xr}\n%%EOF`);
+  const out = new Uint8Array(pos); let q = 0; parts.forEach((u) => { out.set(u, q); q += u.length; }); return new Blob([out], { type: "application/pdf" });
+}
+async function slipDataFor(e) {
+  const m = String(st.month).slice(0, 10), P = periodOf(m);
+  const [rr, dd, aa, vv, ss_, av2] = await Promise.all([rpc("payroll_month", { p_employee: e.id, p_month: m }), rpc("payroll_details", { p_employee: e.id, p_month: m }).catch(() => null),
+    db(`adjustments?select=id,kind,amount,reason&employee_id=eq.${e.id}&effective_date=gte.${P.from}&effective_date=lte.${P.to}&order=created_at`).catch(() => []),
+    db(`advance_installments?select=amount,due_date,advance_id,advances!inner(id,status,installments)&employee_id=eq.${e.id}&due_date=gte.${P.from}&due_date=lte.${P.to}&advances.status=eq.approved`).catch(() => []),
+    db(`attendance_sessions?select=work_date,check_in,check_out&employee_id=eq.${e.id}&work_date=gte.${P.from}&work_date=lte.${P.to}&order=check_in`).catch(() => []),
+    db(`advances?select=amount,status&employee_id=eq.${e.id}&status=eq.pending`).catch(() => [])]);
+  const r = Array.isArray(rr) ? rr[0] : rr; return slipModel(e, r, dd, aa, vv, ss_, av2);
+}
+async function allSlipsPdf(btn) {
+  const emps = st.emps.filter((e) => e.active); if (!emps.length) return alert("مفيش موظفين.");
+  const P = periodOf(st.month), label = btn.textContent; btn.disabled = true;
+  try {
+    try { await document.fonts.load("700 14px 'IBM Plex Sans Arabic'"); await document.fonts.load("400 14px 'IBM Plex Sans Arabic'"); } catch {}
+    const pages = [];
+    for (let i = 0; i < emps.length; i++) {
+      btn.textContent = `جاري التجهيز ${i + 1}/${emps.length}…`;
+      const { cv, W, H } = slipCanvas(await slipDataFor(emps[i]));
+      pages.push({ jpg: Uint8Array.from(atob(cv.toDataURL("image/jpeg", 0.86).split(",")[1]), (ch) => ch.charCodeAt(0)), w: cv.width, h: cv.height, W, H });
+      await new Promise((r) => setTimeout(r, 0));
+    }
+    const file = new File([pdfMulti(pages)], `mogzy-slips-${P.from}.pdf`, { type: "application/pdf" });
+    const mobile = /iPhone|iPad|Android/i.test(navigator.userAgent);
+    if (mobile && navigator.canShare && navigator.canShare({ files: [file] })) { try { await navigator.share({ files: [file] }); } catch (x) { if (x && x.name !== "AbortError") throw x; } }
+    else { const a = document.createElement("a"); a.href = URL.createObjectURL(file); a.download = file.name; document.body.appendChild(a); a.click(); a.remove(); }
+  } catch (x) { alert("حصلت مشكلة في تجهيز الملف: " + (x && x.message ? x.message : x)); }
+  btn.disabled = false; btn.textContent = label;
+}
 const waNum = (ph) => { let d = String(ph || "").replace(/\D/g, ""); if (!d) return ""; if (d.startsWith("00")) d = d.slice(2); else if (d.startsWith("0")) d = "20" + d.slice(1); else if (d.length <= 10 && !d.startsWith("20")) d = "20" + d; return d; };
 async function sendSlip(e, m, r, btn) {
   const num = waNum(e.phone); if (!num) return alert("مفيش رقم موبايل للموظف ده. ضيفه من صفحته في تبويب الموظفون.");
@@ -759,11 +926,11 @@ async function tabPay() {
     const rows = await Promise.all(st.emps.filter((e) => e.active).map(async (e) => { const r = await rpc("payroll_month", { p_employee: e.id, p_month: st.month }); return { e, r: Array.isArray(r) ? r[0] : r }; }));
     st.payRows = rows;
     const sum = rows.reduce((a, x) => a + Number(x.r?.net_pay || 0), 0);
-    $("pt").className = ""; $("pt").innerHTML = `<div class="btns"><button class="btn sm" id="pp">طباعة</button><button class="btn sm" id="px">تنزيل Excel</button></div>
+    $("pt").className = ""; $("pt").innerHTML = `<div class="btns"><button class="btn sm" id="pp">طباعة</button><button class="btn sm" id="px">تنزيل Excel</button><button class="btn sm" id="pa2">PDF القسائم</button></div>
       <table class="pt"><tr><th>الموظف</th><th>الأساسي</th><th>إضافي</th><th>خصومات</th><th>سلف</th><th>الصافي</th></tr>${rows.map(({ e, r }, i) => { const t = payTotals(r);
       return `<tr class="clk" data-i="${i}"><td>${esc(e.full_name)}</td><td class="n">${money(r.base_pay)}</td><td class="n">${money(t.extra)}</td><td class="n">${money(t.ded)}</td><td class="n">${money(r.advances_deducted)}</td><td class="n"><b>${money(r.net_pay)}</b></td></tr>`; }).join("")}
       <tr><td><b>الإجمالي</b></td><td></td><td></td><td></td><td></td><td class="n"><b>${money(sum)}</b></td></tr></table><div class="sub" style="margin-top:8px">اضغط على اسم موظف لعرض قسيمة مرتبه وطباعتها.</div>`;
-    $("px").onclick = () => payXlsx(rows);
+    $("px").onclick = () => payXlsx(rows); $("pa2").onclick = () => allSlipsPdf($("pa2"));
     $("pp").onclick = () => printHtml(`<h2>${esc(st.co.name)}</h2><div class="sub">كشف المرتبات · ${periodLabel(periodOf(st.month))}</div><table><tr><th>الموظف</th><th>الأساسي</th><th>إضافي</th><th>خصومات</th><th>سلف</th><th>الصافي</th><th>التوقيع</th></tr>${rows.map(({ e, r }) => { const t = payTotals(r); return `<tr><td>${esc(e.full_name)}</td><td class="n">${money(r.base_pay)}</td><td class="n">${money(t.extra)}</td><td class="n">${money(t.ded)}</td><td class="n">${money(r.advances_deducted)}</td><td class="n"><b>${money(r.net_pay)}</b></td><td class="sg"></td></tr>`; }).join("")}<tr><td><b>الإجمالي</b></td><td></td><td></td><td></td><td></td><td class="n"><b>${money(sum)}</b></td><td></td></tr></table>`);
     document.querySelectorAll("tr.clk").forEach((tr) => (tr.onclick = () => slipSheet(rows[Number(tr.dataset.i)].e)));
   } catch (e) { $("pt").innerHTML = `<span class="err">${esc(arabicErr(e))}</span>`; }
@@ -830,6 +997,12 @@ function tabSet() {
      ${(st.branches || []).map((b) => `<div class="row clk" data-br="${b.id}"><div class="grow"><b>${esc(b.name)}</b><small>${st.emps.filter((e) => e.branch_id === b.id).length} موظف${b.active ? "" : " · موقوف"}</small></div></div>`).join("")}
      <button type="button" class="btn sm" id="brAdd" style="margin-top:8px">＋ فرع جديد</button>
      ${(st.devices || []).length && (st.branches || []).length ? `<div class="sub" style="margin-top:14px">أجهزة الكشك (اختار الفرع لكل جهاز):</div>${st.devices.map((d) => `<div class="row"><div class="grow"><b>${esc(d.name)}</b></div><select data-dv="${d.id}" style="height:40px;width:auto;font-size:14px;padding:0 8px"><option value="">كل الفروع</option>${st.branches.map((b) => `<option value="${b.id}" ${d.branch_id === b.id ? "selected" : ""}>${esc(b.name)}</option>`).join("")}</select></div>`).join("")}` : ""}`)}
+   ${"location_punch" in s ? sec("الحضور بالموقع", onoff(s.location_punch), `<div class="sub" style="margin-bottom:6px">الموظف يسجّل حضوره وانصرافه من موبايله وهو داخل نطاق الشغل، وبنقرأ موقعه لحظة الضغط فقط. الحضور بالوش على جهاز الباب يفضل شغال زي ما هو.</div>
+     ${tg("location_punch", "السماح بالحضور بالموقع")}${s.employee_app_enabled ? "" : '<div class="note" style="margin:8px 0">لازم تفعّل «السماح للموظفين بالدخول من موبايلهم» تحت عشان الموظف يقدر يسجّل.</div>'}
+     <div class="sub" style="margin-top:12px"><b>مكان الشغل الافتراضي</b><br>الموظف المرتبط بفرع له موقع بيستخدم موقع فرعه، وغيره بيستخدم المكان ده.</div>
+     <div class="g2k"><label class="f">خط العرض<input type="number" step="any" dir="ltr" data-nn="loc_lat" value="${s.loc_lat ?? ""}"></label><label class="f">خط الطول<input type="number" step="any" dir="ltr" data-nn="loc_lng" value="${s.loc_lng ?? ""}"></label></div>
+     ${num("loc_radius_m", "النطاق المسموح", "متر", "من 20 إلى 5000، والأفضل 100 إلى 200")}
+     <button type="button" class="btn sm" id="lgps">استخدم موقعي الحالي (وانت في مكان الشغل)</button><div class="sub" id="lgm" style="margin-top:6px"></div>`) : ""}
    ${sec("الموظفين على موبايلهم", onoff(s.employee_app_enabled), `<div class="sub" style="margin-bottom:6px">اختياري. الحضور يبقى من الجهاز فقط.</div>
      ${tg("employee_app_enabled", "السماح للموظفين بالدخول من موبايلهم")}${tg("employee_auto_link", "ربط تلقائي إذا تطابق رقم الموبايل", "بدون موافقتك")}${tg("employee_see_salary", "يشوف الموظف مرتبه")}${tg("employee_can_request_advance", "يطلب سلفة")}${tg("employee_can_request_leave", "يطلب إجازة")}`)}
    ${sec("الإشعارات", '<span id="pst">...</span>', `<div class="sub" style="margin-bottom:8px">يوصلك إشعار على الموبايل لما موظف يطلب سلفة أو إجازة. فعّله على كل جهاز عايز الإشعار عليه.</div><button class="btn p sm" id="pn">تفعيل الإشعارات على الجهاز ده</button><div id="pne" class="sub" style="margin-top:8px"></div>`)}
@@ -848,6 +1021,8 @@ function tabSet() {
   document.querySelectorAll("[data-dv]").forEach((sel) => (sel.onchange = async () => { try { await db(`devices?id=eq.${sel.dataset.dv}`, { method: "PATCH", body: { branch_id: sel.value || null } }); await loadAdmin(); st.tab = "set"; render(); } catch (x) { alert(arabicErr(x)); } }));
   pushInit();
   document.querySelectorAll("#wo .dc").forEach((b) => (b.onclick = () => b.classList.toggle("on")));
+  if ($("lgps")) $("lgps").onclick = () => { const m = $("lgm"); m.textContent = "جاري تحديد الموقع…"; if (!navigator.geolocation) return (m.textContent = "المتصفح مش بيدعم تحديد الموقع.");
+    navigator.geolocation.getCurrentPosition((pos) => { document.querySelector('[data-nn="loc_lat"]').value = pos.coords.latitude.toFixed(6); document.querySelector('[data-nn="loc_lng"]').value = pos.coords.longitude.toFixed(6); m.textContent = "تم تحديد الموقع ✓ (دقة حوالي " + Math.round(pos.coords.accuracy) + " متر). اضغط حفظ."; }, () => (m.textContent = "تعذر تحديد الموقع، اسمح للمتصفح بالوصول للموقع."), { enableHighAccuracy: true, timeout: 12000 }); };
   $("cpk").onclick = async () => { const ok = await copyText(new URL("./", location.href).href); if (ok) $("cpk").textContent = "تم النسخ ✓"; };
   $("cpl").onclick = async () => { const ok = await copyText(new URL("employee.html", location.href).href); if (ok) $("cpl").textContent = "تم النسخ ✓"; };
   $("sv").onclick = async () => {
@@ -865,6 +1040,7 @@ function tabSet() {
     body.weekly_off_days = [...document.querySelectorAll("#wo .dc.on")].map((b) => Number(b.dataset.day));
     const tiers = [0, 1, 2, 3].map((i) => ({ after_min: document.querySelector(`[data-ta="${i}"]`).value, pct_of_day: document.querySelector(`[data-tp="${i}"]`).value })).filter((t) => t.after_min !== "" && t.pct_of_day !== "").map((t) => ({ after_min: Number(t.after_min), pct_of_day: Number(t.pct_of_day) })).sort((a, b) => a.after_min - b.after_min);
     body.late_tiers = tiers;
+    if (body.location_punch && (body.loc_lat == null || body.loc_lng == null) && !(st.branches || []).some((b) => b.active && b.lat != null && b.lng != null)) return setErr("حدد مكان الشغل الأول (استخدم موقعي الحالي) قبل ما تفعّل الحضور بالموقع.");
     try { await db("company_settings?company_id=eq." + st.co.id, { method: "PATCH", body }); Object.assign(st.set, body); setErr("تم الحفظ ✓", true); } catch (e) { setErr(arabicErr(e)); }
   };
 }
@@ -885,22 +1061,42 @@ async function loadEmployee() {
 }
 const stChip = (s) => `<span class="chip ${s === "approved" ? "c-green" : s === "rejected" ? "c-red" : "c-amber"}">${s === "approved" ? "تمت الموافقة" : s === "rejected" ? "مرفوض" : "بانتظار الموافقة"}</span>`;
 function renderEmployee(pay, adv, lv, ses) {
-  const m = st.mine, nm = m.full_name.split(" ")[0], row = (l, v, c = "") => `<div class="row"><div class="grow">${l}</div><b style="${c}">${v}</b></div>`;
+  const m = st.mine, nm = m.full_name.split(" ")[0], row = (l, v, c = "") => `<div class="row" style="min-height:48px"><div class="grow">${l}</div><b style="${c}">${v}</b></div>`;
+  const sameDay = (iso) => new Date(iso).toDateString() === new Date().toDateString();
+  const open = ses.find((s) => !s.check_out), td = open || ses.find((s) => sameDay(s.check_in)), P = pay && pay.period_from ? shortD(String(pay.period_from).slice(0, 10)) + " – " + shortD(String(pay.period_to).slice(0, 10)) : "";
+  const stateTxt = td ? (td.check_out ? `انصرفت اليوم · ${hhmm(td.check_in)} → ${hhmm(td.check_out)}` : `داخل الشغل منذ ${hhmm(td.check_in)}`) : "لم تسجّل حضور اليوم بعد";
+  const reqs = [...adv.map((a) => ({ t: "سلفة " + money(a.amount) + " ج.م", s: a.status, d: a.created_at })), ...lv.map((l) => ({ t: "إجازة " + shortD(l.from_date) + " ← " + shortD(l.to_date), s: l.status, d: l.created_at }))].sort((a, b) => String(b.d).localeCompare(String(a.d)));
+  const reqRow = (r) => `<div class="row" style="min-height:52px"><div class="grow"><b>${r.t}</b></div>${stChip(r.s)}</div>`;
+  const pending = reqs.filter((r) => r.s === "pending").length;
   view(`<div class="wrap"><div class="top">${LOGO}<button class="btn sm" id="out">خروج</button></div>
    <div class="sub">أهلاً</div><h1>${esc(nm)} · ${esc(m.company_name)}</h1>${statusBanner(st.status)}
-   ${pay ? `<div class="net"><small>صافي مرتبك حتى اليوم</small><div>${money(pay.net_pay)} <span style="font-size:20px">ج.م</span></div></div>
-   <div class="card">${row("الأجر الأساسي", money(pay.base_pay) + " ج.م")}${row("خصم التأخير", "- " + money(Number(pay.late_deduction) + Number(pay.early_leave_deduction)) + " ج.م", "color:var(--red)")}${row("الإضافي", "+ " + money(Number(pay.overtime_pay) + Number(pay.rest_day_pay)) + " ج.م", "color:var(--green)")}${row("سلفة تُخصم", "- " + money(pay.advances_deducted) + " ج.م", "color:var(--red)")}</div>` : ""}
-   <div class="grid2">${m.can_request_advance ? `<div class="card"><h2>طلب سلفة</h2><label class="f">المبلغ<input id="aa" type="number" inputmode="numeric"></label><button class="btn p full" id="as">إرسال</button></div>` : ""}
-   ${m.can_request_leave ? `<div class="card"><h2>طلب إجازة</h2><label class="f">من<input id="lf" type="date"></label><label class="f">إلى<input id="lt" type="date"></label><button class="btn p full" id="ls">إرسال</button></div>` : ""}</div>
-   <div id="err" class="err"></div>
-   <div class="card"><h2>طلباتي</h2>${[...adv.map((a) => `<div class="row"><div class="grow"><b>سلفة ${money(a.amount)} ج.م</b></div>${stChip(a.status)}</div>`), ...lv.map((l) => `<div class="row"><div class="grow"><b>إجازة ${l.from_date} → ${l.to_date}</b></div>${stChip(l.status)}</div>`)].join("") || '<div class="sub">لا توجد طلبات.</div>'}</div>
-   <div class="card"><h2>حضوري</h2>${ses.map((s) => `<div class="row"><div class="grow"><b>${new Date(s.check_in).toLocaleDateString("ar-EG", { weekday: "long", day: "numeric", month: "short" })}</b></div><span class="sub">${hhmm(s.check_in)}${s.check_out ? " → " + hhmm(s.check_out) : " (داخل)"}</span></div>`).join("") || '<div class="sub">لا يوجد حضور مسجّل.</div>'}</div>
-   <div class="note">الحضور والانصراف يتسجلان بوجهك من الجهاز عند الباب فقط.</div></div>`);
-  $("out").onclick = logout;
-  if ($("as")) $("as").onclick = async () => { setErr(""); const n = Number(val("aa")); if (!(n > 0)) return setErr("اكتب مبلغاً"); const d = new Date();
-    try { await rpc("request_advance", { p_amount: n, p_repay_month: todayStr(), p_installments: 1 }); loadEmployee(); } catch (e) { setErr(arabicErr(e)); } };
-  if ($("ls")) $("ls").onclick = async () => { setErr(""); if (!val("lf") || !val("lt") || val("lt") < val("lf")) return setErr("اختر تاريخاً صحيحاً");
-    try { await rpc("request_leave", { p_from: val("lf"), p_to: val("lt"), p_kind: "annual" }); loadEmployee(); } catch (e) { setErr(arabicErr(e)); } };
+   ${pay ? `<div class="net clk" id="netc" role="button" tabindex="0"><small>صافي مرتبك حتى اليوم${P ? " · " + P : ""}</small><div>${money(pay.net_pay)} <span style="font-size:20px">ج.م</span></div><small style="display:block;margin-top:6px;opacity:.8">اضغط للتفاصيل ›</small></div>` : ""}
+   <div class="card" style="padding:6px 20px"><div class="row"><div class="grow"><b>اليوم</b><small>${stateTxt}</small></div><span class="chip ${td ? (td.check_out ? "c-gray" : "c-green") : "c-amber"}">${td ? (td.check_out ? "انتهى" : "داخل") : "—"}</span></div>${m.location_punch ? `<button class="btn p full" id="lp" style="margin:4px 0 8px">${open ? "تسجيل انصراف بالموقع" : "تسجيل حضور بالموقع"}</button><div id="lpm" class="err${st.flash ? " ok" : ""}" style="margin:0 0 8px;min-height:0">${st.flash || ""}</div>` : ""}</div>
+   ${m.can_request_advance || m.can_request_leave ? `<div class="qa">${m.can_request_advance ? '<button class="btn p" id="qadv">طلب سلفة</button>' : ""}${m.can_request_leave ? '<button class="btn p" id="qlv">طلب إجازة</button>' : ""}</div>` : ""}
+   <div class="card" style="padding:6px 20px"><div class="row" style="min-height:40px"><div class="grow"><b>طلباتي</b></div>${pending ? `<span class="chip c-amber">${pending} بانتظار الموافقة</span>` : ""}</div>${reqs.slice(0, 2).map(reqRow).join("") || '<div class="sub" style="padding:10px 0">لا توجد طلبات.</div>'}${reqs.length > 2 ? '<button class="btn sm full" id="allr" style="margin:6px 0 10px">كل الطلبات (' + reqs.length + ")</button>" : ""}</div>
+   <button class="btn full" id="hist">سجل حضوري</button>
+   <div class="note" style="margin-top:14px">${m.location_punch ? "الحضور والانصراف يتسجلان بوجهك من الجهاز عند الباب، أو بموقعك من هنا وأنت في نطاق الشغل. بنقرأ موقعك لحظة الضغط على الزرار فقط." : "الحضور والانصراف يتسجلان بوجهك من الجهاز عند الباب فقط."}</div></div>`);
+  st.flash = null; $("out").onclick = logout;
+  const sheet = (html) => { const ov = overlay(); ov.innerHTML = `<div class="sheet"><button type="button" class="xclose" aria-label="إغلاق">✕</button>${html}</div>`; return ov; };
+  if ($("lp")) $("lp").onclick = () => {
+    const b = $("lp"), lab = b.textContent, msg = (t) => { const e = $("lpm"); if (e) { e.className = "err"; e.textContent = t; } };
+    if (!navigator.geolocation) return msg("المتصفح مش بيدعم تحديد الموقع.");
+    b.disabled = true; b.textContent = "جاري تحديد موقعك…"; msg("");
+    navigator.geolocation.getCurrentPosition(async (pos) => {
+      try { const r = await rpc("punch_by_location", { p_lat: pos.coords.latitude, p_lng: pos.coords.longitude, p_accuracy: pos.coords.accuracy || 0 }); st.flash = r.kind === "in" ? "تم تسجيل حضورك ✓" : "تم تسجيل انصرافك ✓"; loadEmployee(); }
+      catch (e) { b.disabled = false; b.textContent = lab; msg(arabicErr(e)); }
+    }, (er) => { b.disabled = false; b.textContent = lab; msg(er && er.code === 1 ? "اسمح للمتصفح بالوصول لموقعك من إعدادات الموبايل وجرّب تاني." : "تعذر تحديد موقعك، جرّب في مكان مفتوح."); }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
+  };
+  if ($("netc")) $("netc").onclick = () => { const t = payTotals(pay), d = Number(pay.absence_deduction) + Number(pay.late_deduction) + Number(pay.early_leave_deduction), o2 = Number(pay.deductions) + Number(pay.penalties_applied), ti = Number(pay.insurance) + Number(pay.income_tax);
+    sheet(`<h2>تفاصيل المرتب</h2><div class="sub">${P}</div><div class="card" style="margin:10px 0;padding:6px 16px">${row("الأجر الأساسي", money(pay.base_pay) + " ج.م")}${Number(pay.overtime_pay) + Number(pay.rest_day_pay) ? row("إضافي وأيام راحة", "+ " + money(Number(pay.overtime_pay) + Number(pay.rest_day_pay)) + " ج.م", "color:var(--green)") : ""}${Number(pay.bonuses) ? row("مكافآت", "+ " + money(pay.bonuses) + " ج.م", "color:var(--green)") : ""}${d ? row("تأخير وغياب", "- " + money(d) + " ج.م", "color:var(--red)") : ""}${o2 ? row("خصومات وجزاءات", "- " + money(o2) + " ج.م", "color:var(--red)") : ""}${ti ? row("تأمين وضريبة", "- " + money(ti) + " ج.م", "color:var(--red)") : ""}${Number(pay.advances_deducted) ? row("سلفة تُخصم", "- " + money(pay.advances_deducted) + " ج.م", "color:var(--red)") : ""}${row("<b>الصافي</b>", "<b>" + money(pay.net_pay) + " ج.م</b>")}</div><div class="sub" style="font-size:13px">الرقم حتى اليوم وقد يتغير حتى نهاية الفترة.</div>`); };
+  if ($("qadv")) $("qadv").onclick = () => { const ov = sheet(`<h2>طلب سلفة</h2><label class="f">المبلغ (ج.م)<input id="aa" type="number" inputmode="numeric" autofocus></label><div id="err" class="err"></div><div class="btns"><button class="btn p full" id="as">إرسال الطلب</button></div>`);
+    ov.querySelector("#as").onclick = async () => { setErr(""); const n = Number(val("aa")); if (!(n > 0)) return setErr("اكتب مبلغاً");
+      try { await rpc("request_advance", { p_amount: n, p_repay_month: todayStr(), p_installments: 1 }); ov.remove(); loadEmployee(); } catch (e) { setErr(arabicErr(e)); } }; };
+  if ($("qlv")) $("qlv").onclick = () => { const ov = sheet(`<h2>طلب إجازة</h2><div class="g2k"><label class="f">من<input id="lf" type="date"></label><label class="f">إلى<input id="lt" type="date"></label></div><div id="err" class="err"></div><div class="btns"><button class="btn p full" id="ls">إرسال الطلب</button></div>`);
+    ov.querySelector("#ls").onclick = async () => { setErr(""); if (!val("lf") || !val("lt") || val("lt") < val("lf")) return setErr("اختر تاريخاً صحيحاً");
+      try { await rpc("request_leave", { p_from: val("lf"), p_to: val("lt"), p_kind: "annual" }); ov.remove(); loadEmployee(); } catch (e) { setErr(arabicErr(e)); } }; };
+  if ($("allr")) $("allr").onclick = () => sheet(`<h2>كل طلباتي</h2><div class="card" style="margin:10px 0;padding:6px 16px">${reqs.map(reqRow).join("")}</div>`);
+  $("hist").onclick = () => sheet(`<h2>سجل حضوري</h2><div class="sub">آخر 7 أيام</div><div class="card" style="margin:10px 0;padding:6px 16px">${ses.map((s) => `<div class="row"><div class="grow"><b>${new Date(s.check_in).toLocaleDateString("ar-EG", { weekday: "long", day: "numeric", month: "short" })}</b></div><span class="sub">${hhmm(s.check_in)}${s.check_out ? " → " + hhmm(s.check_out) : " (داخل)"}</span></div>`).join("") || '<div class="sub" style="padding:10px 0">لا يوجد حضور مسجّل.</div>'}</div>`);
 }
 
 /* ---------------- PLATFORM OWNER (company codes + all companies) ---------------- */
