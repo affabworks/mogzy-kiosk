@@ -1324,14 +1324,12 @@ async function loadEmployee() {
     const ts = await rpc("terms_state").catch(() => null);   // null = terms not installed yet (older database): don't block
     if (ts && (!ts.accepted || ts.version !== TERMS_VERSION)) return termsScreen(st.mine);
     st.ts = ts;
-    const [pay, adv, lv, ses, lb, hol, slip] = await Promise.all([
+    const [pay, adv, lv, ses, lb, hol] = await Promise.all([
       st.mine.can_see_salary ? rpc("my_payroll", { p_month: st.month }).catch(() => null) : null,
       db("advances?select=*&order=created_at.desc&limit=8"), db("leave_requests?select=*&order=created_at.desc&limit=8"),
       db("attendance_sessions?select=check_in,check_out&order=check_in.desc&limit=7"),
       rpc("leave_balance").catch(() => null), rpc("upcoming_holidays", { p_limit: 3 }).catch(() => []),
-      st.mine.can_see_salary ? rpc("my_slip", { p_month: st.month }).catch(() => null) : null,
     ]);
-    st.slip = slip;
     st.lb = lb && lb.enabled !== false ? lb : null; st.hol = hol || [];
     renderEmployee(pay, adv, lv, ses);
   } catch (e) { view(`<div class="wrap"><div class="err">${esc(arabicErr(e))}</div></div>`); }
@@ -1385,25 +1383,15 @@ function scanSheet() {
 let zoneTimer = null, zoneVis = null;
 function zoneStop() { if (zoneTimer) { clearInterval(zoneTimer); zoneTimer = null; } if (zoneVis) { document.removeEventListener("visibilitychange", zoneVis); zoneVis = null; } }
 // "inside / outside the work zone" for the admin: covered by the terms the employee accepted; only while checked in with the app open
-let zoneLast = null;
-function zoneCard() {
-  const zc = $("zcard"); if (!zc) return;
-  zc.innerHTML = `<div class="card" style="padding:6px 20px"><div class="row"><div class="grow"><b>حالة موقعك للإدارة</b><small id="zt">جاري التحديد…</small></div><span id="zchip" class="chip c-gray">—</span></div><div class="sub" style="padding:0 0 8px;font-size:13px">الإدارة بتشوف جوه/برّه نطاق الشغل بس، طول ما إنت مسجّل حضور والتطبيق مفتوح، حسب الشروط اللي وافقت عليها. مفيش تتبع لمسارك.</div></div>`;
-  if (zoneLast) zoneShow(zoneLast[0], zoneLast[1]);
-}
-function zoneShow(r, err) {
-  zoneLast = [r, err];
-  const t = $("zt"), c = $("zchip"); if (!t || !c) return;
-  if (r && r.inside != null) { c.className = "chip " + (r.inside ? "c-green" : "c-red"); c.textContent = r.inside ? "جوه النطاق" : "برّه النطاق"; t.textContent = "آخر تحديث " + hhmm(new Date().toISOString()); }
-  else { c.className = "chip c-gray"; c.textContent = "—"; t.textContent = err || (r && r.skipped === "weak" ? "إشارة الموقع ضعيفة، هنحاول تاني" : "جاري التحديد…"); }
-}
-// keep = the page only switched tabs: don't restart the reporting, just redraw the card
-function zoneSetup(open, keep) {
-  const ts = st.ts;
-  if (!ts || !ts.zone_enabled || !open) { zoneStop(); zoneLast = null; return; }
-  if (keep && zoneTimer) return zoneCard();
-  zoneStop(); zoneLast = null; zoneCard();
-  const go = async () => { try { const p = await getPos(); zoneShow(await rpc("report_zone", { p_lat: p.lat, p_lng: p.lng, p_accuracy: p.acc })); } catch (e) { zoneShow(null, e.message); } };
+function zoneSetup(open) {
+  zoneStop(); const ts = st.ts, zc = $("zcard"); if (!zc || !ts || !ts.zone_enabled || !open) return;
+  zc.innerHTML = `<div class="card" style="padding:6px 20px"><div class="row"><div class="grow"><b>موقعك</b><small id="zt">جاري التحديد…</small></div><span id="zchip" class="chip c-gray">—</span></div><div class="sub" style="padding:0 0 8px;font-size:13px">الإدارة بتشوف جوه/برّه النطاق بس، وإنت مسجّل حضور.</div></div>`;
+  const upd = (r, err) => {
+    const t = $("zt"), c = $("zchip"); if (!t || !c) return;
+    if (r && r.inside != null) { c.className = "chip " + (r.inside ? "c-green" : "c-red"); c.textContent = r.inside ? "جوه النطاق" : "برّه النطاق"; t.textContent = "آخر تحديث " + hhmm(new Date().toISOString()); }
+    else { c.className = "chip c-gray"; c.textContent = "—"; t.textContent = err || (r && r.skipped === "weak" ? "إشارة الموقع ضعيفة، هنحاول تاني" : "جاري التحديد…"); }
+  };
+  const go = async () => { try { const p = await getPos(); upd(await rpc("report_zone", { p_lat: p.lat, p_lng: p.lng, p_accuracy: p.acc })); } catch (e) { upd(null, e.message); } };
   go(); zoneTimer = setInterval(() => { if (!document.hidden) go(); }, 120000);
   zoneVis = () => { if (!document.hidden) go(); }; document.addEventListener("visibilitychange", zoneVis);
 }
@@ -1440,44 +1428,27 @@ function termsScreen(m) {
     catch (e) { $("te").textContent = arabicErr(e); upd(); }
   };
 }
-function renderEmployee(pay, adv, lv, ses, keepZone) {
+function renderEmployee(pay, adv, lv, ses) {
   const m = st.mine, nm = m.full_name.split(" ")[0], row = (l, v, c = "") => `<div class="row" style="min-height:48px"><div class="grow">${l}</div><b style="${c}">${v}</b></div>`;
   const sameDay = (iso) => new Date(iso).toDateString() === new Date().toDateString();
   const open = ses.find((s) => !s.check_out), td = open || ses.find((s) => sameDay(s.check_in)), P = pay && pay.period_from ? shortD(String(pay.period_from).slice(0, 10)) + " – " + shortD(String(pay.period_to).slice(0, 10)) : "";
-  const stateTxt = td ? (td.check_out ? `انصرفت اليوم · ${hhmm(td.check_in)} → ${hhmm(td.check_out)}` : `داخل الشغل منذ ${hhmm(td.check_in)}`) : "لم تسجّل حضور اليوم بعد";
+  const stateTxt = td ? (td.check_out ? `انصرفت اليوم · ${hhmm(td.check_in)} → ${hhmm(td.check_out)}` : `داخل الشغل منذ ${hhmm(td.check_in)}`) : "لسه ما سجّلتش حضور";
   const reqs = [...adv.map((a) => ({ t: "سلفة " + money(a.amount) + " ج.م", s: a.status, d: a.created_at })), ...lv.map((l) => ({ t: "إجازة " + shortD(l.from_date) + " ← " + shortD(l.to_date), s: l.status, d: l.created_at }))].sort((a, b) => String(b.d).localeCompare(String(a.d)));
   const reqWhen = (iso) => iso ? "اتطلبت " + new Date(iso).toLocaleDateString("ar-EG-u-nu-latn", { day: "numeric", month: "short", timeZone: "Africa/Cairo" }) + " · " + new Date(iso).toLocaleTimeString("ar-EG-u-nu-latn", { hour: "numeric", minute: "2-digit", timeZone: "Africa/Cairo" }) : "";
   const reqRow = (r) => `<div class="row" style="min-height:52px"><div class="grow"><b>${r.t}</b><small>${reqWhen(r.d)}</small></div>${stChip(r.s)}</div>`;
   const pending = reqs.filter((r) => r.s === "pending").length;
-  const et = st.etab || "home", canPay = m.can_see_salary;
-  const etabs = [["home", "الرئيسية", ICON.today], ["req", "طلباتي", ICON.inbox], ["tbl", canPay ? "كشفي" : "سجلي", ICON.cash]];
-  const homeV = `${pay ? `<div class="net clk" id="netc" role="button" tabindex="0"><small>صافي مرتبك حتى اليوم${P ? " · " + P : ""}</small><div>${money(pay.net_pay)} <span style="font-size:20px">ج.م</span></div><small style="display:block;margin-top:6px;opacity:.8">اضغط للتفاصيل ›</small></div>` : ""}
-      <div class="card" style="padding:6px 20px"><div class="row"><div class="grow"><b>اليوم</b><small>${stateTxt}</small></div><span class="chip ${td ? (td.check_out ? "c-gray" : "c-green") : "c-amber"}">${td ? (td.check_out ? "انتهى" : "داخل") : "—"}</span></div>${m.location_punch ? `<button class="btn p full" id="lp" style="margin:4px 0 8px">${open ? "تسجيل انصراف بالموقع" : "تسجيل حضور بالموقع"}</button><div id="lpm" class="err${st.flash ? " ok" : ""}" style="margin:0 0 8px;min-height:0">${st.flash || ""}</div>` : ""}</div>
-   <div id="zcard"></div>
-   <div class="note" style="margin-top:14px">${m.location_punch ? "الحضور والانصراف يتسجلان بوجهك من الجهاز عند الباب، أو بموقعك من هنا وأنت في نطاق الشغل. بنقرأ موقعك لحظة الضغط على الزرار فقط." : "الحضور والانصراف يتسجلان بوجهك من الجهاز عند الباب فقط."}</div>`;
-  const reqV = `   ${m.can_request_advance || m.can_request_leave ? `<div class="qa">${m.can_request_advance ? '<button class="btn p" id="qadv">طلب سلفة</button>' : ""}${m.can_request_leave ? '<button class="btn p" id="qlv">طلب إجازة</button>' : ""}</div>` : ""}
-   ${st.lb || (st.hol || []).length ? `<div class="card" style="padding:6px 20px">${st.lb ? `<div class="row" style="min-height:48px"><div class="grow"><b>رصيد إجازاتي</b><small>${st.lb.used} اتاخد من ${st.lb.entitled} · السنة لحد ${shortD(String(st.lb.year_to).slice(0, 10))}</small></div><b style="font-size:22px">${st.lb.remaining}<span class="sub" style="font-size:13px"> يوم</span></b></div>` : ""}${(st.hol || []).length ? `<div class="sub" style="padding:0 0 10px;font-size:13px">الإجازات الرسمية الجاية: ${st.hol.map((x) => esc(x.name) + " (" + shortD(x.day) + ")").join("، ")}</div>` : ""}</div>` : ""}
-   <div class="card" style="padding:6px 20px"><div class="row" style="min-height:40px"><div class="grow"><b>طلباتي</b></div>${pending ? `<span class="chip c-amber">${pending} بانتظار الموافقة</span>` : ""}</div>${reqs.map(reqRow).join("") || '<div class="sub" style="padding:10px 0">لا توجد طلبات.</div>'}</div>`;
-  const dayBits = (sm) => sm.rows.filter((x) => x.tin || x.note || x.cls !== "mu").map((x) => { const net = Number(x.add) - Number(x.ded); return `<tr class="${x.cls}"><td class="dy">${x.day}</td><td>${x.tin ? x.tin + (x.tout ? " ← " + x.tout : "") : ""}</td><td class="nt2">${esc(x.note)}</td><td style="font-weight:600;${net < 0 ? "color:var(--red)" : net > 0 ? "color:var(--green)" : ""}">${net ? (net > 0 ? "+" : "−") + money(Math.abs(net)) : ""}</td></tr>`; }).join("");
-  const tblV = (() => {
-    if (canPay && st.slip && pay) {
-      const sm = slipModel(m, pay, st.slip.det, st.slip.adj, st.slip.advs, st.slip.ses, st.slip.pend, true);
-      return `<div class="ps" style="margin-top:6px"><div class="sub">${esc(sm.sub)}</div>
-       <div class="strip">${sm.strip.map(([l, v, c]) => `<div class="${c}"><span>${l}</span><b>${money(v)}</b></div>`).join("")}</div>
-       <table class="cal"><tr><th>اليوم</th><th>حضور ← انصراف</th><th>ملاحظات</th><th>المبلغ</th></tr>${dayBits(sm)}</table>
-       ${sm.oth.length ? `<table class="cal" style="margin-top:12px"><tr><th colspan="3">بنود أخرى</th><th>المبلغ</th></tr>${sm.oth.map((x) => `<tr><td colspan="3" class="nt2">${esc(x.t)}</td><td style="font-weight:600;${Number(x.ded) ? "color:var(--red)" : "color:var(--green)"}">${Number(x.ded) ? "−" + money(x.ded) : "+" + money(x.add)}</td></tr>`).join("")}</table>` : ""}
-       ${sm.notes.length ? `<div class="nt">${sm.notes.map((x) => "• " + esc(x)).join("<br>")}</div>` : ""}</div>`;
-    }
-    return `<div class="card" style="margin:10px 0;padding:6px 16px">${ses.map((s2) => `<div class="row"><div class="grow">${new Date(s2.check_in).toLocaleDateString("ar-EG-u-nu-latn", { weekday: "long", day: "numeric", month: "short" })}</div><b>${hhmm(s2.check_in)} ← ${s2.check_out ? hhmm(s2.check_out) : "—"}</b></div>`).join("") || '<div class="sub" style="padding:10px 0">لا يوجد حضور مسجّل.</div>'}</div>`;
-  })();
   view(`<div class="wrap"><div class="top">${LOGO}<button class="btn sm" id="out">خروج</button></div>
-   <div class="sub">أهلاً</div><h1>${esc(nm)} · ${esc(m.company_name)}</h1>${statusBanner(st.status)}
-   ${et === "tbl" ? tblV : et === "req" ? reqV : homeV}</div>
-   <div class="tabs">${etabs.map(([k, l, i]) => `<button data-et="${k}" class="${et === k ? "on" : ""}">${i}<span>${l}</span>${k === "req" && pending ? `<span class="badge">${pending}</span>` : ""}</button>`).join("")}</div>`);
-  document.querySelectorAll(".tabs button[data-et]").forEach((b) => (b.onclick = () => { st.etab = b.dataset.et; renderEmployee(pay, adv, lv, ses, true); }));
+   <h1 style="margin-top:6px">${esc(nm)}</h1>${statusBanner(st.status)}
+   ${pay ? `<div class="net clk" id="netc" role="button" tabindex="0"><small>صافي مرتبك حتى اليوم</small><div>${money(pay.net_pay)} <span style="font-size:20px">ج.م</span></div><small style="display:block;margin-top:4px;opacity:.7">التفاصيل ›</small></div>` : ""}
+   <div class="card" style="padding:6px 20px"><div class="row"><div class="grow"><b>اليوم</b><small>${stateTxt}</small></div>${td ? `<span class="chip ${td.check_out ? "c-gray" : "c-green"}">${td.check_out ? "انتهى" : "داخل"}</span>` : ""}</div>${m.location_punch ? `<button class="btn p full" id="lp" style="margin:4px 0 8px">${open ? "تسجيل انصراف بالموقع" : "تسجيل حضور بالموقع"}</button><div id="lpm" class="err${st.flash ? " ok" : ""}" style="margin:0 0 8px;min-height:0">${st.flash || ""}</div>` : ""}</div>
+   <div id="zcard"></div>
+   ${m.can_request_advance || m.can_request_leave ? `<div class="qa">${m.can_request_advance ? '<button class="btn p" id="qadv">طلب سلفة</button>' : ""}${m.can_request_leave ? '<button class="btn p" id="qlv">طلب إجازة</button>' : ""}</div>` : ""}
+   <button class="btn full" id="allr" style="margin:0 0 10px">طلباتي${pending ? ` <span class="chip c-amber" style="margin-inline-start:8px">${pending} بانتظار</span>` : ""}</button>
+   <button class="btn full" id="hist">سجل حضوري</button>
+</div>`);
   st.flash = null; $("out").onclick = logout;
   const sheet = (html) => { const ov = overlay(); ov.innerHTML = `<div class="sheet"><button type="button" class="xclose" aria-label="إغلاق">✕</button>${html}</div>`; return ov; };
-  zoneSetup(!!open, keepZone);
+  zoneSetup(!!open);
   if ($("lp")) $("lp").onclick = async () => {
     const b = $("lp"), lab = b.textContent, msg = (t) => { const e = $("lpm"); if (e) { e.className = "err"; e.textContent = t; } }, reset = () => { b.disabled = false; b.textContent = lab; };
     b.disabled = true; b.textContent = "جاري تحديد موقعك…"; msg("");
@@ -1505,7 +1476,8 @@ function renderEmployee(pay, adv, lv, ses, keepZone) {
   if ($("qlv")) $("qlv").onclick = () => { const ov = sheet(`<h2>طلب إجازة</h2>${st.lb ? `<div class="sub" style="margin:-4px 0 8px">رصيدك المتبقي ${st.lb.remaining} يوم</div>` : ""}<div class="g2k"><label class="f">من<input id="lf" type="date"></label><label class="f">إلى<input id="lt" type="date"></label></div><div id="err" class="err"></div><div class="btns"><button class="btn p full" id="ls">إرسال الطلب</button></div>`);
     ov.querySelector("#ls").onclick = async () => { setErr(""); if (!val("lf") || !val("lt") || val("lt") < val("lf")) return setErr("اختر تاريخاً صحيحاً");
       try { await rpc("request_leave", { p_from: val("lf"), p_to: val("lt"), p_kind: "annual" }); ov.remove(); loadEmployee(); } catch (e) { setErr(arabicErr(e)); } }; };
-  if (false) $("hist").onclick = () => sheet(`<h2>سجل حضوري</h2><div class="sub">آخر 7 أيام</div><div class="card" style="margin:10px 0;padding:6px 16px">${ses.map((s) => `<div class="row"><div class="grow"><b>${new Date(s.check_in).toLocaleDateString("ar-EG", { weekday: "long", day: "numeric", month: "short" })}</b></div><span class="sub">${hhmm(s.check_in)}${s.check_out ? " → " + hhmm(s.check_out) : " (داخل)"}</span></div>`).join("") || '<div class="sub" style="padding:10px 0">لا يوجد حضور مسجّل.</div>'}</div>`);
+  if ($("allr")) $("allr").onclick = () => sheet(`<h2>طلباتي</h2>${st.lb ? `<div class="row" style="min-height:48px"><div class="grow"><b>رصيد إجازاتي</b><small>${st.lb.used} اتاخد من ${st.lb.entitled}</small></div><b style="font-size:22px">${st.lb.remaining}<span class="sub" style="font-size:13px"> يوم</span></b></div>` : ""}${(st.hol || []).length ? `<div class="sub" style="padding:0 0 10px;font-size:13px">إجازات رسمية جاية: ${st.hol.map((x) => esc(x.name) + " (" + shortD(x.day) + ")").join("، ")}</div>` : ""}<div class="card" style="margin:10px 0;padding:6px 16px">${reqs.map(reqRow).join("") || '<div class="sub" style="padding:10px 0">لا توجد طلبات.</div>'}</div>`);
+  $("hist").onclick = () => sheet(`<h2>سجل حضوري</h2><div class="sub">آخر 7 أيام</div><div class="card" style="margin:10px 0;padding:6px 16px">${ses.map((s) => `<div class="row"><div class="grow"><b>${new Date(s.check_in).toLocaleDateString("ar-EG", { weekday: "long", day: "numeric", month: "short" })}</b></div><span class="sub">${hhmm(s.check_in)}${s.check_out ? " → " + hhmm(s.check_out) : " (داخل)"}</span></div>`).join("") || '<div class="sub" style="padding:10px 0">لا يوجد حضور مسجّل.</div>'}</div>`);
 }
 
 /* ---------------- PLATFORM OWNER (company codes + all companies) ---------------- */
