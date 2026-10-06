@@ -827,7 +827,9 @@ function payCsv(rows) {
 }
 const dayL = (d) => new Date(d + "T12:00:00").toLocaleDateString("ar-EG-u-nu-latn", { weekday: "long", day: "numeric", month: "numeric" });
 const fmtMin = (m) => (m >= 60 ? Math.floor(m / 60) + " س" + (m % 60 ? " و" + (m % 60) + " د" : "") : m + " د");
-function slipModel(e, r, det, adj, advs, ses, advAll) {
+function slipModel(e, r, det, adj, advs, ses, advAll, short) {
+  const fmtHM = (m) => Math.floor(m / 60) + ":" + String(m % 60).padStart(2, "0"), sep = short ? " · " : " + ";
+  const advBy = {}; (advs || []).forEach((x) => { if (x.advances && x.advances.created_at) { const dd = new Date(x.advances.created_at).toLocaleDateString("en-CA", { timeZone: "Africa/Cairo" }); advBy[dd] = (advBy[dd] || 0) + Number(x.amount); } });
   const inf = (det && det.info) || null, its = (det && det.items) || [];
   const P = inf && inf.period_from ? { from: String(inf.period_from).slice(0, 10), to: String(inf.period_to).slice(0, 10) } : periodOf(st.month), single = P.from.slice(0, 7) === P.to.slice(0, 7);
   const wd = (iso) => new Date(iso + "T12:00:00").toLocaleDateString("ar-EG-u-nu-latn", { weekday: "long" });
@@ -847,14 +849,15 @@ function slipModel(e, r, det, adj, advs, ses, advAll) {
       it.forEach((i) => {
         const a2 = Number(i.amount) || 0;
         if (i.kind === "absent") { parts.push(i.note === "غياب" ? "غياب" : "غياب (" + i.note + ")"); ded += a2; }
-        else if (i.kind === "late") { parts.push("تأخير " + fmtMin(i.minutes) + (i.note === "معفى" ? " (معفى)" : "")); ded += a2; }
-        else if (i.kind === "early") { parts.push("انصراف مبكر " + fmtMin(i.minutes) + (i.note === "معفى" ? " (معفى)" : "")); ded += a2; }
-        else if (i.kind === "overtime") { parts.push("إضافي " + fmtMin(i.minutes)); add += a2; }
-        else if (i.kind === "rest") { parts.push("شغل في الإجازة"); add += a2; }
+        else if (i.kind === "late") { parts.push((short ? "تأخر " + fmtHM(i.minutes) : "تأخير " + fmtMin(i.minutes)) + (i.note === "معفى" ? " (معفى)" : "")); ded += a2; }
+        else if (i.kind === "early") { parts.push((short ? "مبكر " + fmtHM(i.minutes) : "انصراف مبكر " + fmtMin(i.minutes)) + (i.note === "معفى" ? " (معفى)" : "")); ded += a2; }
+        else if (i.kind === "overtime") { parts.push(short ? "إضافي " + fmtHM(i.minutes) : "إضافي " + fmtMin(i.minutes)); add += a2; }
+        else if (i.kind === "rest") { parts.push(short ? "شغل راحة" : "شغل في الإجازة"); add += a2; }
       });
-      note = parts.join(" + ") || (ss.length ? "حاضر" : "");
+      note = parts.join(sep) || (ss.length ? "حاضر" : "");
       cls = ded > 0 ? "bad" : add > 0 ? "good" : "";
     }
+    if (advBy[iso]) note = (note ? note + sep : "") + "سلفة " + money(advBy[iso]);
     tDed += ded; tAdd += add;
     rows.push({ day: (single ? d : d + "/" + Number(iso.slice(5, 7))) + " " + wd(iso), tin, tout, note, ded, add, cls });
   }
@@ -862,14 +865,14 @@ function slipModel(e, r, det, adj, advs, ses, advAll) {
   ad("bonus").forEach((x) => oth.push({ t: "مكافأة" + (x.reason ? " — " + x.reason : ""), ded: 0, add: x.amount }));
   ad("deduction").forEach((x) => oth.push({ t: "خصم" + (x.reason ? " — " + x.reason : ""), ded: x.amount, add: 0 }));
   ad("penalty").forEach((x) => oth.push({ t: "جزاء" + (x.reason ? " — " + x.reason : ""), ded: x.amount, add: 0 }));
-  (advs || []).forEach((x) => oth.push({ t: "سلفة" + (x.advances && x.advances.installments > 1 ? " (قسط من " + x.advances.installments + ")" : ""), ded: x.amount, add: 0 }));
+  (advs || []).forEach((x) => oth.push({ t: "سلفة" + (x.advances && x.advances.created_at ? " · " + shortD(String(x.advances.created_at).slice(0, 10)) : "") + (x.advances && x.advances.installments > 1 ? " (قسط من " + x.advances.installments + ")" : ""), ded: x.amount, add: 0 }));
   if (Number(r.insurance)) oth.push({ t: "تأمينات", ded: r.insurance, add: 0 });
   if (Number(r.income_tax)) oth.push({ t: "ضريبة دخل", ded: r.income_tax, add: 0 });
   const t = payTotals(r);
   const notes = (advAll || []).filter((x) => x.status === "pending").map((x) => `سلفة ${money(x.amount)} بانتظار الموافقة (غير محسوبة)`);
   if (inf && inf.overtime_raw_minutes !== inf.overtime_paid_minutes) notes.push(`الإضافي بعد التقريب: ${fmtMin(inf.overtime_paid_minutes)} من ${fmtMin(inf.overtime_raw_minutes)}`);
   const asOf = inf && String(inf.as_of).slice(0, 10) < P.to ? ` · محسوب لحد ${inf.as_of.slice(8)}/${inf.as_of.slice(5, 7)}` : "";
-  return { co: st.co.name, sub: "قسيمة مرتب · " + periodLabel(P) + asOf, who: e.full_name + (e.job_title ? " · " + e.job_title : ""),
+  return { co: (st.co && st.co.name) || (st.mine && st.mine.company_name) || "", sub: "قسيمة مرتب · " + periodLabel(P) + asOf, who: e.full_name + (e.job_title ? " · " + e.job_title : ""),
     strip: [["الأساسي", r.base_pay, ""], ["إضافات", t.extra, ""], ["خصومات", t.ded, "r"], ["سلف", r.advances_deducted, "r"], ["الصافي", r.net_pay, "net"]],
     rows, tDed: Math.round(tDed), tAdd: Math.round(tAdd), oth, notes };
 }
@@ -949,7 +952,7 @@ async function slipDataFor(e) {
   const m = String(st.month).slice(0, 10), P = periodOf(m);
   const [rr, dd, aa, vv, ss_, av2] = await Promise.all([rpc("payroll_month", { p_employee: e.id, p_month: m }), rpc("payroll_details", { p_employee: e.id, p_month: m }).catch(() => null),
     db(`adjustments?select=id,kind,amount,reason&employee_id=eq.${e.id}&effective_date=gte.${P.from}&effective_date=lte.${P.to}&order=created_at`).catch(() => []),
-    db(`advance_installments?select=amount,due_date,advance_id,advances!inner(id,status,installments)&employee_id=eq.${e.id}&due_date=gte.${P.from}&due_date=lte.${P.to}&advances.status=eq.approved`).catch(() => []),
+    db(`advance_installments?select=amount,due_date,advance_id,advances!inner(id,status,installments,created_at)&employee_id=eq.${e.id}&due_date=gte.${P.from}&due_date=lte.${P.to}&advances.status=eq.approved`).catch(() => []),
     db(`attendance_sessions?select=work_date,check_in,check_out&employee_id=eq.${e.id}&work_date=gte.${P.from}&work_date=lte.${P.to}&order=check_in`).catch(() => []),
     db(`advances?select=amount,status&employee_id=eq.${e.id}&status=eq.pending`).catch(() => [])]);
   const r = Array.isArray(rr) ? rr[0] : rr; return slipModel(e, r, dd, aa, vv, ss_, av2);
@@ -996,7 +999,7 @@ async function slipSheet(e) {
   const draw = async () => {
     try {
       const [rr, dd, aa, vv, ss_, av2] = await Promise.all([rpc("payroll_month", { p_employee: e.id, p_month: m }), rpc("payroll_details", { p_employee: e.id, p_month: m }).catch(() => null),
-        db(`adjustments?select=id,kind,amount,reason&employee_id=eq.${e.id}&effective_date=gte.${P.from}&effective_date=lte.${P.to}&order=created_at`).catch(() => []), db(`advance_installments?select=amount,due_date,advance_id,advances!inner(id,status,installments)&employee_id=eq.${e.id}&due_date=gte.${P.from}&due_date=lte.${P.to}&advances.status=eq.approved`).catch(() => []),
+        db(`adjustments?select=id,kind,amount,reason&employee_id=eq.${e.id}&effective_date=gte.${P.from}&effective_date=lte.${P.to}&order=created_at`).catch(() => []), db(`advance_installments?select=amount,due_date,advance_id,advances!inner(id,status,installments,created_at)&employee_id=eq.${e.id}&due_date=gte.${P.from}&due_date=lte.${P.to}&advances.status=eq.approved`).catch(() => []),
         db(`attendance_sessions?select=work_date,check_in,check_out&employee_id=eq.${e.id}&work_date=gte.${P.from}&work_date=lte.${P.to}&order=check_in`).catch(() => []),
         db(`advances?select=amount,status&employee_id=eq.${e.id}&status=eq.pending`).catch(() => [])]);
       r = Array.isArray(rr) ? rr[0] : rr; det = dd; adj = aa; advs = vv; ses = ss_; advAll = av2;
@@ -1007,7 +1010,7 @@ async function slipSheet(e) {
         <label class="f">النوع<select id="ak"><option value="bonus">مكافأة</option><option value="deduction">خصم</option><option value="penalty">جزاء</option><option value="advance">سلفة (تتخصم من الفترة دي)</option></select></label>
         <div class="g2k"><label class="f">المبلغ<input id="aa" type="number" inputmode="decimal"></label><label class="f">السبب<input id="ar"></label></div>
         <div id="ae" class="err"></div><div class="btns"><button class="btn p sm" id="aadd">إضافة</button></div>
-        ${adj.length || advs.length ? `<div class="sub">المضاف للفترة دي:</div>${adj.map((x) => `<div class="row" style="min-height:44px"><div class="grow">${{ bonus: "مكافأة", deduction: "خصم", penalty: "جزاء" }[x.kind]} · ${money(x.amount)} ${esc(x.reason || "")}</div><button class="btn sm" data-da="adjustments|${x.id}">حذف</button></div>`).join("")}${advs.map((x) => `<div class="row" style="min-height:44px"><div class="grow">سلفة · ${money(x.amount)}</div><button class="btn sm" data-da="advances|${x.advance_id}">حذف</button></div>`).join("")}` : ""}
+        ${adj.length || advs.length ? `<div class="sub">المضاف للفترة دي:</div>${adj.map((x) => `<div class="row" style="min-height:44px"><div class="grow">${{ bonus: "مكافأة", deduction: "خصم", penalty: "جزاء" }[x.kind]} · ${money(x.amount)} ${esc(x.reason || "")}</div><button class="btn sm" data-da="adjustments|${x.id}">حذف</button></div>`).join("")}${advs.map((x) => `<div class="row" style="min-height:44px"><div class="grow">سلفة · ${money(x.amount)}${x.advances && x.advances.created_at ? " · " + shortD(String(x.advances.created_at).slice(0, 10)) : ""}</div><button class="btn sm" data-da="advances|${x.advance_id}">حذف</button></div>`).join("")}` : ""}
       </details></div>`;
     const q = (id) => o.querySelector(id), er = (t) => (q("#ae").textContent = t);
     q("#ps").onclick = () => printHtml(payslipHtml(e, r, det, adj, advs, ses, advAll));
@@ -1321,12 +1324,14 @@ async function loadEmployee() {
     const ts = await rpc("terms_state").catch(() => null);   // null = terms not installed yet (older database): don't block
     if (ts && (!ts.accepted || ts.version !== TERMS_VERSION)) return termsScreen(st.mine);
     st.ts = ts;
-    const [pay, adv, lv, ses, lb, hol] = await Promise.all([
+    const [pay, adv, lv, ses, lb, hol, slip] = await Promise.all([
       st.mine.can_see_salary ? rpc("my_payroll", { p_month: st.month }).catch(() => null) : null,
       db("advances?select=*&order=created_at.desc&limit=8"), db("leave_requests?select=*&order=created_at.desc&limit=8"),
       db("attendance_sessions?select=check_in,check_out&order=check_in.desc&limit=7"),
       rpc("leave_balance").catch(() => null), rpc("upcoming_holidays", { p_limit: 3 }).catch(() => []),
+      st.mine.can_see_salary ? rpc("my_slip", { p_month: st.month }).catch(() => null) : null,
     ]);
+    st.slip = slip;
     st.lb = lb && lb.enabled !== false ? lb : null; st.hol = hol || [];
     renderEmployee(pay, adv, lv, ses);
   } catch (e) { view(`<div class="wrap"><div class="err">${esc(arabicErr(e))}</div></div>`); }
@@ -1380,15 +1385,25 @@ function scanSheet() {
 let zoneTimer = null, zoneVis = null;
 function zoneStop() { if (zoneTimer) { clearInterval(zoneTimer); zoneTimer = null; } if (zoneVis) { document.removeEventListener("visibilitychange", zoneVis); zoneVis = null; } }
 // "inside / outside the work zone" for the admin: covered by the terms the employee accepted; only while checked in with the app open
-function zoneSetup(open) {
-  zoneStop(); const ts = st.ts, zc = $("zcard"); if (!zc || !ts || !ts.zone_enabled || !open) return;
+let zoneLast = null;
+function zoneCard() {
+  const zc = $("zcard"); if (!zc) return;
   zc.innerHTML = `<div class="card" style="padding:6px 20px"><div class="row"><div class="grow"><b>حالة موقعك للإدارة</b><small id="zt">جاري التحديد…</small></div><span id="zchip" class="chip c-gray">—</span></div><div class="sub" style="padding:0 0 8px;font-size:13px">الإدارة بتشوف جوه/برّه نطاق الشغل بس، طول ما إنت مسجّل حضور والتطبيق مفتوح، حسب الشروط اللي وافقت عليها. مفيش تتبع لمسارك.</div></div>`;
-  const upd = (r, err) => {
-    const t = $("zt"), c = $("zchip"); if (!t || !c) return;
-    if (r && r.inside != null) { c.className = "chip " + (r.inside ? "c-green" : "c-red"); c.textContent = r.inside ? "جوه النطاق" : "برّه النطاق"; t.textContent = "آخر تحديث " + hhmm(new Date().toISOString()); }
-    else { c.className = "chip c-gray"; c.textContent = "—"; t.textContent = err || (r && r.skipped === "weak" ? "إشارة الموقع ضعيفة، هنحاول تاني" : "جاري التحديد…"); }
-  };
-  const go = async () => { try { const p = await getPos(); upd(await rpc("report_zone", { p_lat: p.lat, p_lng: p.lng, p_accuracy: p.acc })); } catch (e) { upd(null, e.message); } };
+  if (zoneLast) zoneShow(zoneLast[0], zoneLast[1]);
+}
+function zoneShow(r, err) {
+  zoneLast = [r, err];
+  const t = $("zt"), c = $("zchip"); if (!t || !c) return;
+  if (r && r.inside != null) { c.className = "chip " + (r.inside ? "c-green" : "c-red"); c.textContent = r.inside ? "جوه النطاق" : "برّه النطاق"; t.textContent = "آخر تحديث " + hhmm(new Date().toISOString()); }
+  else { c.className = "chip c-gray"; c.textContent = "—"; t.textContent = err || (r && r.skipped === "weak" ? "إشارة الموقع ضعيفة، هنحاول تاني" : "جاري التحديد…"); }
+}
+// keep = the page only switched tabs: don't restart the reporting, just redraw the card
+function zoneSetup(open, keep) {
+  const ts = st.ts;
+  if (!ts || !ts.zone_enabled || !open) { zoneStop(); zoneLast = null; return; }
+  if (keep && zoneTimer) return zoneCard();
+  zoneStop(); zoneLast = null; zoneCard();
+  const go = async () => { try { const p = await getPos(); zoneShow(await rpc("report_zone", { p_lat: p.lat, p_lng: p.lng, p_accuracy: p.acc })); } catch (e) { zoneShow(null, e.message); } };
   go(); zoneTimer = setInterval(() => { if (!document.hidden) go(); }, 120000);
   zoneVis = () => { if (!document.hidden) go(); }; document.addEventListener("visibilitychange", zoneVis);
 }
@@ -1425,27 +1440,44 @@ function termsScreen(m) {
     catch (e) { $("te").textContent = arabicErr(e); upd(); }
   };
 }
-function renderEmployee(pay, adv, lv, ses) {
+function renderEmployee(pay, adv, lv, ses, keepZone) {
   const m = st.mine, nm = m.full_name.split(" ")[0], row = (l, v, c = "") => `<div class="row" style="min-height:48px"><div class="grow">${l}</div><b style="${c}">${v}</b></div>`;
   const sameDay = (iso) => new Date(iso).toDateString() === new Date().toDateString();
   const open = ses.find((s) => !s.check_out), td = open || ses.find((s) => sameDay(s.check_in)), P = pay && pay.period_from ? shortD(String(pay.period_from).slice(0, 10)) + " – " + shortD(String(pay.period_to).slice(0, 10)) : "";
   const stateTxt = td ? (td.check_out ? `انصرفت اليوم · ${hhmm(td.check_in)} → ${hhmm(td.check_out)}` : `داخل الشغل منذ ${hhmm(td.check_in)}`) : "لم تسجّل حضور اليوم بعد";
   const reqs = [...adv.map((a) => ({ t: "سلفة " + money(a.amount) + " ج.م", s: a.status, d: a.created_at })), ...lv.map((l) => ({ t: "إجازة " + shortD(l.from_date) + " ← " + shortD(l.to_date), s: l.status, d: l.created_at }))].sort((a, b) => String(b.d).localeCompare(String(a.d)));
-  const reqRow = (r) => `<div class="row" style="min-height:52px"><div class="grow"><b>${r.t}</b></div>${stChip(r.s)}</div>`;
+  const reqWhen = (iso) => iso ? "اتطلبت " + new Date(iso).toLocaleDateString("ar-EG-u-nu-latn", { day: "numeric", month: "short", timeZone: "Africa/Cairo" }) + " · " + new Date(iso).toLocaleTimeString("ar-EG-u-nu-latn", { hour: "numeric", minute: "2-digit", timeZone: "Africa/Cairo" }) : "";
+  const reqRow = (r) => `<div class="row" style="min-height:52px"><div class="grow"><b>${r.t}</b><small>${reqWhen(r.d)}</small></div>${stChip(r.s)}</div>`;
   const pending = reqs.filter((r) => r.s === "pending").length;
+  const et = st.etab || "home", canPay = m.can_see_salary;
+  const etabs = [["home", "الرئيسية", ICON.today], ["req", "طلباتي", ICON.inbox], ["tbl", canPay ? "كشفي" : "سجلي", ICON.cash]];
+  const homeV = `${pay ? `<div class="net clk" id="netc" role="button" tabindex="0"><small>صافي مرتبك حتى اليوم${P ? " · " + P : ""}</small><div>${money(pay.net_pay)} <span style="font-size:20px">ج.م</span></div><small style="display:block;margin-top:6px;opacity:.8">اضغط للتفاصيل ›</small></div>` : ""}
+      <div class="card" style="padding:6px 20px"><div class="row"><div class="grow"><b>اليوم</b><small>${stateTxt}</small></div><span class="chip ${td ? (td.check_out ? "c-gray" : "c-green") : "c-amber"}">${td ? (td.check_out ? "انتهى" : "داخل") : "—"}</span></div>${m.location_punch ? `<button class="btn p full" id="lp" style="margin:4px 0 8px">${open ? "تسجيل انصراف بالموقع" : "تسجيل حضور بالموقع"}</button><div id="lpm" class="err${st.flash ? " ok" : ""}" style="margin:0 0 8px;min-height:0">${st.flash || ""}</div>` : ""}</div>
+   <div id="zcard"></div>
+   <div class="note" style="margin-top:14px">${m.location_punch ? "الحضور والانصراف يتسجلان بوجهك من الجهاز عند الباب، أو بموقعك من هنا وأنت في نطاق الشغل. بنقرأ موقعك لحظة الضغط على الزرار فقط." : "الحضور والانصراف يتسجلان بوجهك من الجهاز عند الباب فقط."}</div>`;
+  const reqV = `   ${m.can_request_advance || m.can_request_leave ? `<div class="qa">${m.can_request_advance ? '<button class="btn p" id="qadv">طلب سلفة</button>' : ""}${m.can_request_leave ? '<button class="btn p" id="qlv">طلب إجازة</button>' : ""}</div>` : ""}
+   ${st.lb || (st.hol || []).length ? `<div class="card" style="padding:6px 20px">${st.lb ? `<div class="row" style="min-height:48px"><div class="grow"><b>رصيد إجازاتي</b><small>${st.lb.used} اتاخد من ${st.lb.entitled} · السنة لحد ${shortD(String(st.lb.year_to).slice(0, 10))}</small></div><b style="font-size:22px">${st.lb.remaining}<span class="sub" style="font-size:13px"> يوم</span></b></div>` : ""}${(st.hol || []).length ? `<div class="sub" style="padding:0 0 10px;font-size:13px">الإجازات الرسمية الجاية: ${st.hol.map((x) => esc(x.name) + " (" + shortD(x.day) + ")").join("، ")}</div>` : ""}</div>` : ""}
+   <div class="card" style="padding:6px 20px"><div class="row" style="min-height:40px"><div class="grow"><b>طلباتي</b></div>${pending ? `<span class="chip c-amber">${pending} بانتظار الموافقة</span>` : ""}</div>${reqs.map(reqRow).join("") || '<div class="sub" style="padding:10px 0">لا توجد طلبات.</div>'}</div>`;
+  const dayBits = (sm) => sm.rows.filter((x) => x.tin || x.note || x.cls !== "mu").map((x) => { const net = Number(x.add) - Number(x.ded); return `<tr class="${x.cls}"><td class="dy">${x.day}</td><td>${x.tin ? x.tin + (x.tout ? " ← " + x.tout : "") : ""}</td><td class="nt2">${esc(x.note)}</td><td style="font-weight:600;${net < 0 ? "color:var(--red)" : net > 0 ? "color:var(--green)" : ""}">${net ? (net > 0 ? "+" : "−") + money(Math.abs(net)) : ""}</td></tr>`; }).join("");
+  const tblV = (() => {
+    if (canPay && st.slip && pay) {
+      const sm = slipModel(m, pay, st.slip.det, st.slip.adj, st.slip.advs, st.slip.ses, st.slip.pend, true);
+      return `<div class="ps" style="margin-top:6px"><div class="sub">${esc(sm.sub)}</div>
+       <div class="strip">${sm.strip.map(([l, v, c]) => `<div class="${c}"><span>${l}</span><b>${money(v)}</b></div>`).join("")}</div>
+       <table class="cal"><tr><th>اليوم</th><th>حضور ← انصراف</th><th>ملاحظات</th><th>المبلغ</th></tr>${dayBits(sm)}</table>
+       ${sm.oth.length ? `<table class="cal" style="margin-top:12px"><tr><th colspan="3">بنود أخرى</th><th>المبلغ</th></tr>${sm.oth.map((x) => `<tr><td colspan="3" class="nt2">${esc(x.t)}</td><td style="font-weight:600;${Number(x.ded) ? "color:var(--red)" : "color:var(--green)"}">${Number(x.ded) ? "−" + money(x.ded) : "+" + money(x.add)}</td></tr>`).join("")}</table>` : ""}
+       ${sm.notes.length ? `<div class="nt">${sm.notes.map((x) => "• " + esc(x)).join("<br>")}</div>` : ""}</div>`;
+    }
+    return `<div class="card" style="margin:10px 0;padding:6px 16px">${ses.map((s2) => `<div class="row"><div class="grow">${new Date(s2.check_in).toLocaleDateString("ar-EG-u-nu-latn", { weekday: "long", day: "numeric", month: "short" })}</div><b>${hhmm(s2.check_in)} ← ${s2.check_out ? hhmm(s2.check_out) : "—"}</b></div>`).join("") || '<div class="sub" style="padding:10px 0">لا يوجد حضور مسجّل.</div>'}</div>`;
+  })();
   view(`<div class="wrap"><div class="top">${LOGO}<button class="btn sm" id="out">خروج</button></div>
    <div class="sub">أهلاً</div><h1>${esc(nm)} · ${esc(m.company_name)}</h1>${statusBanner(st.status)}
-   ${pay ? `<div class="net clk" id="netc" role="button" tabindex="0"><small>صافي مرتبك حتى اليوم${P ? " · " + P : ""}</small><div>${money(pay.net_pay)} <span style="font-size:20px">ج.م</span></div><small style="display:block;margin-top:6px;opacity:.8">اضغط للتفاصيل ›</small></div>` : ""}
-   <div class="card" style="padding:6px 20px"><div class="row"><div class="grow"><b>اليوم</b><small>${stateTxt}</small></div><span class="chip ${td ? (td.check_out ? "c-gray" : "c-green") : "c-amber"}">${td ? (td.check_out ? "انتهى" : "داخل") : "—"}</span></div>${m.location_punch ? `<button class="btn p full" id="lp" style="margin:4px 0 8px">${open ? "تسجيل انصراف بالموقع" : "تسجيل حضور بالموقع"}</button><div id="lpm" class="err${st.flash ? " ok" : ""}" style="margin:0 0 8px;min-height:0">${st.flash || ""}</div>` : ""}</div>
-   <div id="zcard"></div>
-   ${m.can_request_advance || m.can_request_leave ? `<div class="qa">${m.can_request_advance ? '<button class="btn p" id="qadv">طلب سلفة</button>' : ""}${m.can_request_leave ? '<button class="btn p" id="qlv">طلب إجازة</button>' : ""}</div>` : ""}
-   ${st.lb || (st.hol || []).length ? `<div class="card" style="padding:6px 20px">${st.lb ? `<div class="row" style="min-height:48px"><div class="grow"><b>رصيد إجازاتي</b><small>${st.lb.used} اتاخد من ${st.lb.entitled} · السنة لحد ${shortD(String(st.lb.year_to).slice(0, 10))}</small></div><b style="font-size:22px">${st.lb.remaining}<span class="sub" style="font-size:13px"> يوم</span></b></div>` : ""}${(st.hol || []).length ? `<div class="sub" style="padding:0 0 10px;font-size:13px">الإجازات الرسمية الجاية: ${st.hol.map((x) => esc(x.name) + " (" + shortD(x.day) + ")").join("، ")}</div>` : ""}</div>` : ""}
-   <div class="card" style="padding:6px 20px"><div class="row" style="min-height:40px"><div class="grow"><b>طلباتي</b></div>${pending ? `<span class="chip c-amber">${pending} بانتظار الموافقة</span>` : ""}</div>${reqs.slice(0, 2).map(reqRow).join("") || '<div class="sub" style="padding:10px 0">لا توجد طلبات.</div>'}${reqs.length > 2 ? '<button class="btn sm full" id="allr" style="margin:6px 0 10px">كل الطلبات (' + reqs.length + ")</button>" : ""}</div>
-   <button class="btn full" id="hist">سجل حضوري</button>
-   <div class="note" style="margin-top:14px">${m.location_punch ? "الحضور والانصراف يتسجلان بوجهك من الجهاز عند الباب، أو بموقعك من هنا وأنت في نطاق الشغل. بنقرأ موقعك لحظة الضغط على الزرار فقط." : "الحضور والانصراف يتسجلان بوجهك من الجهاز عند الباب فقط."}</div></div>`);
+   ${et === "tbl" ? tblV : et === "req" ? reqV : homeV}</div>
+   <div class="tabs">${etabs.map(([k, l, i]) => `<button data-et="${k}" class="${et === k ? "on" : ""}">${i}<span>${l}</span>${k === "req" && pending ? `<span class="badge">${pending}</span>` : ""}</button>`).join("")}</div>`);
+  document.querySelectorAll(".tabs button[data-et]").forEach((b) => (b.onclick = () => { st.etab = b.dataset.et; renderEmployee(pay, adv, lv, ses, true); }));
   st.flash = null; $("out").onclick = logout;
   const sheet = (html) => { const ov = overlay(); ov.innerHTML = `<div class="sheet"><button type="button" class="xclose" aria-label="إغلاق">✕</button>${html}</div>`; return ov; };
-  zoneSetup(!!open);
+  zoneSetup(!!open, keepZone);
   if ($("lp")) $("lp").onclick = async () => {
     const b = $("lp"), lab = b.textContent, msg = (t) => { const e = $("lpm"); if (e) { e.className = "err"; e.textContent = t; } }, reset = () => { b.disabled = false; b.textContent = lab; };
     b.disabled = true; b.textContent = "جاري تحديد موقعك…"; msg("");
@@ -1473,8 +1505,7 @@ function renderEmployee(pay, adv, lv, ses) {
   if ($("qlv")) $("qlv").onclick = () => { const ov = sheet(`<h2>طلب إجازة</h2>${st.lb ? `<div class="sub" style="margin:-4px 0 8px">رصيدك المتبقي ${st.lb.remaining} يوم</div>` : ""}<div class="g2k"><label class="f">من<input id="lf" type="date"></label><label class="f">إلى<input id="lt" type="date"></label></div><div id="err" class="err"></div><div class="btns"><button class="btn p full" id="ls">إرسال الطلب</button></div>`);
     ov.querySelector("#ls").onclick = async () => { setErr(""); if (!val("lf") || !val("lt") || val("lt") < val("lf")) return setErr("اختر تاريخاً صحيحاً");
       try { await rpc("request_leave", { p_from: val("lf"), p_to: val("lt"), p_kind: "annual" }); ov.remove(); loadEmployee(); } catch (e) { setErr(arabicErr(e)); } }; };
-  if ($("allr")) $("allr").onclick = () => sheet(`<h2>كل طلباتي</h2><div class="card" style="margin:10px 0;padding:6px 16px">${reqs.map(reqRow).join("")}</div>`);
-  $("hist").onclick = () => sheet(`<h2>سجل حضوري</h2><div class="sub">آخر 7 أيام</div><div class="card" style="margin:10px 0;padding:6px 16px">${ses.map((s) => `<div class="row"><div class="grow"><b>${new Date(s.check_in).toLocaleDateString("ar-EG", { weekday: "long", day: "numeric", month: "short" })}</b></div><span class="sub">${hhmm(s.check_in)}${s.check_out ? " → " + hhmm(s.check_out) : " (داخل)"}</span></div>`).join("") || '<div class="sub" style="padding:10px 0">لا يوجد حضور مسجّل.</div>'}</div>`);
+  if (false) $("hist").onclick = () => sheet(`<h2>سجل حضوري</h2><div class="sub">آخر 7 أيام</div><div class="card" style="margin:10px 0;padding:6px 16px">${ses.map((s) => `<div class="row"><div class="grow"><b>${new Date(s.check_in).toLocaleDateString("ar-EG", { weekday: "long", day: "numeric", month: "short" })}</b></div><span class="sub">${hhmm(s.check_in)}${s.check_out ? " → " + hhmm(s.check_out) : " (داخل)"}</span></div>`).join("") || '<div class="sub" style="padding:10px 0">لا يوجد حضور مسجّل.</div>'}</div>`);
 }
 
 /* ---------------- PLATFORM OWNER (company codes + all companies) ---------------- */
